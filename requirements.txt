@@ -1,0 +1,29 @@
+# The Canary — Dependencies
+
+# Core
+numpy>=1.24.0
+soundfile>=0.12.0
+
+# ASR
+sherpa-onnx>=1.10.0
+
+# Speaker Verification Index
+faiss-cpu>=1.7.0
+
+# State Store
+redis>=5.0.0
+
+# Agent Framework
+fastmcp>=0.1.0
+
+# SLM Client
+ollama>=0.3.0
+
+# Audio I/O
+sounddevice>=0.4.6
+
+# UI
+rich>=13.0.0
+
+# Dev/Test
+pytest>=7.0.0

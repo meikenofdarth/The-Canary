@@ -1,0 +1,36 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+*.egg
+.venv/
+venv/
+env/
+
+# Models (large files — download separately)
+models/*.onnx
+models/*.bin
+models/*.safetensors
+models/*.pt
+models/**/*.onnx
+
+# Speaker embeddings (generated locally)
+models/speaker_embeddings/*.npy
+
+# Data
+data/test_audio/*.wav
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# Redis
+dump.rdb
+
+# Logs
+*.log
