@@ -10,11 +10,15 @@ venv/
 env/
 
 # Models (large files — download separately)
+models/sherpa-onnx-*/
 models/*.onnx
 models/*.bin
 models/*.safetensors
 models/*.pt
 models/**/*.onnx
+models/*.tar.bz2
+models/*.tar.gz
+models/*.zip
 
 # Speaker embeddings (generated locally)
 models/speaker_embeddings/*.npy
