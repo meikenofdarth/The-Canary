@@ -1,29 +1,17 @@
 # The Canary — Dependencies
+# Install: pip install -r requirements.txt
 
-# Core
-numpy>=1.24.0
-soundfile>=0.12.0
+# Core ML / Audio
+sherpa-onnx>=1.13.0       # ASR engine (SenseVoiceSmall)
+numpy>=2.0.0              # Array operations
+soundfile>=0.13.0         # WAV file I/O
 
-# ASR
-sherpa-onnx>=1.10.0
+# Infrastructure
+redis>=8.0.0              # State store (sessions, profiles, history)
+faiss-cpu>=1.14.0         # Speaker verification index (cosine similarity)
 
-# Speaker Verification Index
-faiss-cpu>=1.7.0
-
-# State Store
-redis>=5.0.0
-
-# Agent Framework
-fastmcp>=0.1.0
-
-# SLM Client
-ollama>=0.3.0
-
-# Audio I/O
-sounddevice>=0.4.6
+# Agent / MCP
+fastmcp>=3.3.0            # MCP server framework (tool decorators)
 
 # UI
-rich>=13.0.0
-
-# Dev/Test
-pytest>=7.0.0
+rich>=15.0.0              # Terminal UI (demo panels, tables, live display)
