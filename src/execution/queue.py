@@ -51,18 +51,23 @@ class ExecutionQueue:
         if decision.action == DecisionAction.CLARIFY:
             return f"🔊 Clarification needed: {decision.reason}"
         
-        # Execute command(s)
+        # Execute command(s) via MCP tool router
+        from src.agent.mcp_server import route_command
+        
         results = []
         for cmd in decision.commands:
-            # TODO: Route to MCP tools based on parsed intent
-            result = f"✅ Executed: {cmd.get('text', 'unknown')} (speaker: {cmd.get('speaker', 'unknown')})"
+            text = cmd.get('text', '')
+            speaker = cmd.get('speaker', 'unknown')
+            
+            # Route to appropriate smart home tool
+            result = route_command(text, speaker)
             results.append(result)
             
             # Log to state store
             if self.state_store:
                 self.state_store.log_command(
-                    user_id=cmd.get('speaker', 'unknown'),
-                    command=cmd.get('text', ''),
+                    user_id=speaker,
+                    command=text,
                     result=result
                 )
         
