@@ -1,1 +1,1 @@
-# Tests for The Canary
+# The Canary — Test Suite
