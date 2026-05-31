@@ -1,6 +1,6 @@
 # Your Project Name
 
-- **Problem Statement Number** - 
+- **Problem Statement Number** - 11
 - **Problem Statement Title** - *(Must exactly match one of the 11 Samsung EnnovateX AX Hackathon Problem Statements)*
 - **Team name** - *(Same as Phase 1 Team name)*
 - **Team members (Names)** - *Member 1 Name*, *Member 2 Name*
@@ -21,7 +21,7 @@
 
 #### Final Presentation
 
-Unlike Phase 1 presentation, in Phase 2 you can freely decide the template, flow and content of your technical presentation. Ensure you cover all aspects of your solution - innovation, novelty, architecture, open datasets/models developed and used, final deliverable details, KPIs of your solution, AI/Agent use, any other details. 
+Unlike Phase 1 presentation, in Phase 2 you can freely decide the template, flow and content of your technical presentation. Ensure you cover all aspects of your solution - innovation, novelty, architecture, open datasets/models developed and used, final deliverable details, KPIs of your solution, AI/Agent use, any other details.
 
 #### Full Submission Demo Video
 
@@ -30,11 +30,12 @@ Create a high quality video demonstration your solution in real life and showcas
 #### Setup & Result Reproducibility Video
 
 To ensure reproducibility of results and to verify the presented KPIs, we require you to create a video demonstrating:
-- Step by step project installation,
-- Data/model download steps, 
-- Execution of all required codes to train the developed models (if any)
-- Execution of all evaluation codes to reproduce the presented results/KPIs 
 
-### Attribution 
+- Step by step project installation,
+- Data/model download steps,
+- Execution of all required codes to train the developed models (if any)
+- Execution of all evaluation codes to reproduce the presented results/KPIs
+
+### Attribution
 
 In case this project is built on top of an existing open source project, please provide the original project link here. Also, mention what new features were developed. Failing to attribute the source projects may lead to disqualification during the time of evaluation.
