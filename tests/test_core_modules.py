@@ -376,7 +376,7 @@ def test_execution_queue():
     # Enqueue commands with different priorities
     admin_decision = ArbitrationDecision(
         action=DecisionAction.EXECUTE,
-        commands=[{"text": "turn on lights", "speaker": "hemang"}],
+        commands=[{"text": "play music", "speaker": "hemang"}],
         reason="Admin command",
         priority_speaker="hemang",
         confidence=0.95

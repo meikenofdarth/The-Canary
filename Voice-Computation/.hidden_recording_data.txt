@@ -1,0 +1,16 @@
+transcript = canary canary
+rms = 0.028209708631038666
+sample_rate = 16000
+duration_seconds = 6.99
+wakeword_detected = True
+wakeword_confidence = 0.9
+keyword = canary
+speech_probability = 0.052387773990631104
+vad_confidence = 0.052387773990631104
+noise_floor_db = -58.54960139950878
+speaker_count = 3
+overlap_probability = 0.15111519678253377
+noise_level_normalized = 0.03569196144503071
+is_directed_speech = True
+scs = 0.07293826521877425
+mode = A
