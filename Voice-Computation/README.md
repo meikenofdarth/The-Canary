@@ -51,12 +51,16 @@ Everything up to the point where audio gets routed to Sanchit's AI models (TIGER
 - Estimates speaker count from spectral features
 - Detects overlap probability
 - Routes to Mode A/B/C based on SCS thresholds
+- Runs pitch, frequency-intensity, and overlap analysis in
+  `separation/speaker_analyzer.py`
+- Produces local diagnostic speaker stems with soft spectral masks in
+  `separation/spectral_separator.py`
 
 ### 6. Dynamic Resource Scaler (`scaler/resource_scaler.py`)
 - Takes scene analysis output and decides the compute path:
-  - **Mode A** (SCS < 0.20): Clean single speaker → lightweight DSP only, skip separation
-  - **Mode B** (0.20 ≤ SCS < 0.45): Moderate noise → adaptive DSP + speaker verification
-  - **Mode C** (SCS ≥ 0.45): Heavy overlap → full TIGER separation pipeline
+  - **Mode A** (SCS < 0.22): Clean single speaker → lightweight DSP only
+  - **Mode B** (0.22 ≤ SCS < 0.40): Moderate noise → adaptive DSP
+  - **Mode C** (SCS ≥ 0.40): Heavy overlap → local fallback stems + TIGER-ready handoff
 - Outputs a `ScalerDecision` with the mode, processed audio, and all metadata
 
 ## How It Works (Flow)

@@ -7,40 +7,54 @@ HOW IT WORKS:
     It applies final quality checks:
     1. Confidence filtering: Drop audio if overall confidence is too low
     2. Audio quality check: Verify the cleaned audio is usable
-    3. Mode-specific preparation:
-       - Mode A: Just pass cleaned audio (no separation needed)
-       - Mode B: Apply additional adaptive filtering
-       - Mode C: Pass as-is (TIGER will handle separation)
+    3. Mode-specific DSP preparation:
+       - Mode A: Gentle 80 Hz high-pass + peak-normalize to 0.9
+       - Mode B: 4-band Wiener filter (frequency-aware noise suppression)
+       - Mode C: Peak normalize to 0.9 for TIGER (no extra processing)
+    
+    Multi-Band Wiener Filter (Mode B):
+    ────────────────────────────────────
+    Instead of a single gain applied to all frequencies, we split the
+    spectrum into 4 bands and apply different gains per band:
+    
+        Band 0:    0 – 500 Hz   (rumble, low voice resonance)
+        Band 1:  500 – 2000 Hz  (speech formants F1/F2 — most important)
+        Band 2: 2000 – 4000 Hz  (speech formants F3/F4, sibilants)
+        Band 3: 4000 – 8000 Hz  (high-frequency noise, fricatives)
+    
+    Each band has a configurable floor (minimum gain) to prevent
+    over-subtraction artifacts ("musical noise").
     
     ┌────────────────────────────────────────────────────────────────┐
     │              Dynamic Resource Scaler                           │
     │                                                                │
     │  Input: PreProcessedAudio + SceneAnalysis + VAD/WW results    │
     │                                                                │
-    │  ┌──────────┐    ┌──────────┐    ┌──────────┐                 │
-    │  │  MODE A   │    │  MODE B   │    │  MODE C   │                │
-    │  │ Clean     │    │ Moderate  │    │ Complex   │                │
-    │  │ 1 speaker │    │ Noisy     │    │ Overlap   │                │
-    │  │ Skip sep. │    │ Adapt.DSP │    │ Full sep. │                │
-    │  └────┬─────┘    └────┬─────┘    └────┬─────┘                 │
-    │       │               │               │                        │
-    │       └───────────────┼───────────────┘                        │
-    │                       │                                        │
-    │              ScalerDecision                                    │
-    │        (audio + mode + metadata)                               │
-    │                       │                                        │
-    │              → Sanchit's Pipeline                              │
+    │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐        │
+    │  │  MODE A       │  │  MODE B       │  │  MODE C       │       │
+    │  │ HPF 80Hz +    │  │ 4-Band Wiener │  │ Peak norm     │       │
+    │  │ Peak 0.9      │  │ per-band gain │  │ to 0.9        │       │
+    │  └──────┬────────┘  └──────┬────────┘  └──────┬────────┘      │
+    │         └──────────────────┼──────────────────┘               │
+    │                            │                                   │
+    │                    ScalerDecision                              │
+    │               (audio + mode + metadata)                        │
+    │                            │                                   │
+    │                  → Sanchit's Pipeline                          │
     └────────────────────────────────────────────────────────────────┘
 """
 import numpy as np
 import logging
 import time
+from typing import Optional
 
 from ..config import VoiceConfig, PipelineMode
 from ..models import (
     VADResult, WakeWordResult, PreProcessedAudio,
     AudioFeatures, SceneAnalysis, ScalerDecision,
 )
+from ..separation.speaker_analyzer import SpeakerAnalysis
+from ..separation.spectral_separator import SeparationResult
 
 logger = logging.getLogger(__name__)
 
@@ -52,7 +66,7 @@ class DynamicResourceScaler:
     what Sanchit receives and uses to decide which AI models to run.
     
     Args:
-        config: VoiceConfig with confidence thresholds.
+        config: VoiceConfig with confidence thresholds and DSP parameters.
     """
     
     def __init__(self, config: VoiceConfig):
@@ -63,7 +77,22 @@ class DynamicResourceScaler:
             PipelineMode.MODE_B: 0,
             PipelineMode.MODE_C: 0,
         }
-    
+
+        # Pre-compute frequency bin boundaries from config
+        sr = config.sample_rate
+        n_bins = config.n_fft // 2 + 1  # e.g. 257 bins for n_fft=512
+        bin_hz = sr / config.n_fft      # Hz per bin
+
+        edges = getattr(config, "wiener_band_edges_hz", [500, 2000, 4000])
+        self._band_boundaries = [0]
+        for hz in edges:
+            self._band_boundaries.append(int(round(hz / bin_hz)))
+        self._band_boundaries.append(n_bins)
+
+        self._band_floors = getattr(
+            config, "wiener_band_floors", [0.15, 0.08, 0.05, 0.12]
+        )
+
     def decide(
         self,
         preprocessed: PreProcessedAudio,
@@ -71,6 +100,8 @@ class DynamicResourceScaler:
         scene: SceneAnalysis,
         vad_result: VADResult,
         wakeword_result: WakeWordResult,
+        speaker_analysis: Optional[SpeakerAnalysis] = None,
+        separation: Optional[SeparationResult] = None,
     ) -> ScalerDecision:
         """Make the final routing decision.
         
@@ -83,18 +114,18 @@ class DynamicResourceScaler:
             
         Returns:
             ScalerDecision ready for Sanchit's pipeline.
-            Returns None-like decision if audio should be dropped.
         """
         mode = scene.mode
         audio = preprocessed.audio
         
-        # Apply mode-specific processing
+        # Apply mode-specific DSP
         if mode == PipelineMode.MODE_A:
             audio = self._prepare_mode_a(audio)
         elif mode == PipelineMode.MODE_B:
             audio = self._prepare_mode_b(audio, preprocessed.noise_floor_db)
         else:  # MODE_C
-            audio = self._prepare_mode_c(audio)
+            mode_c_audio = separation.processed_audio if separation else audio
+            audio = self._prepare_mode_c(mode_c_audio)
         
         decision = ScalerDecision(
             mode=mode,
@@ -110,6 +141,13 @@ class DynamicResourceScaler:
             is_directed_speech=scene.is_directed_speech,
             mel_spectrogram=features.mel_spectrogram,
             energy_profile=features.energy,
+            separated_audio=separation.speaker_streams if separation else [],
+            separation_method=separation.method if separation else "none",
+            speaker_profiles=(
+                [profile.to_dict() for profile in speaker_analysis.profiles]
+                if speaker_analysis
+                else []
+            ),
         )
         
         # Track stats
@@ -151,55 +189,93 @@ class DynamicResourceScaler:
         
         return True
     
+    # ── Mode A: Clean single speaker ──────────────────────────────────────
+    
     def _prepare_mode_a(self, audio: np.ndarray) -> np.ndarray:
-        """Mode A: Clean single speaker — minimal processing.
+        """Mode A: Clean single speaker.
         
-        The audio is already clean. Just ensure proper normalization.
+        Processing:
+        1. Gentle high-pass filter at 80 Hz (removes mic rumble / HVAC)
+        2. Peak normalize to 0.9 for consistent downstream amplitude
+        
         TIGER separation is skipped entirely for this path.
         """
-        # Just ensure the audio is properly scaled
-        peak = np.abs(audio).max()
-        if peak > 0 and peak < 0.1:
-            # Audio is too quiet — boost it
-            audio = audio * (0.5 / peak)
+        audio = self._highpass_filter(audio, cutoff_hz=80.0)
+        audio = self._peak_normalize(audio, target=0.9)
         return audio
     
+    # ── Mode B: Moderate noise — 4-Band Wiener Filter ─────────────────────
+
     def _prepare_mode_b(self, audio: np.ndarray, noise_floor_db: float) -> np.ndarray:
-        """Mode B: Moderate noise — apply additional adaptive filtering.
+        """Mode B: Moderate noise — apply per-band Wiener filter.
         
-        Uses a simple Wiener-like filter to reduce noise without
-        the full TIGER separation pipeline.
+        Splits the STFT into 4 frequency bands and computes a Wiener gain
+        per band based on the per-band SNR estimate:
+        
+            G_band = max( 1 - noise_power_band / (signal_power_band + ε), floor_band )
+        
+        Different floors per band protect speech formants (mid bands)
+        while more aggressively suppressing low-frequency rumble and
+        high-frequency hiss.
+        
+        WHY per-band:
+          - A single gain suppresses all frequencies equally — bad for speech
+            because the formant bands (500–4kHz) need gentle treatment while
+            low and high bands can be suppressed more aggressively.
         """
-        # Simple spectral gating based on noise floor
         n_fft = self.config.n_fft
         hop = self.config.hop_length
+        dither_amp = getattr(self.config, "dither_amplitude", 1e-6)
         
         if len(audio) < n_fft:
             return audio
         
+        # Convert noise floor dB to a linear power reference.
+        # Use power domain: P_noise = 10^(dB/10)  (not amplitude domain /20)
+        noise_power_ref = 10.0 ** (noise_floor_db / 10.0)
+        
         window = np.hanning(n_fft).astype(np.float32)
         n_frames = (len(audio) - n_fft) // hop + 1
         
-        # STFT
+        # ── Forward STFT ──────────────────────────────────────────────
         stft = np.zeros((n_fft // 2 + 1, n_frames), dtype=np.complex128)
         for i in range(n_frames):
             start = i * hop
-            frame = audio[start:start + n_fft] * window
-            stft[:, i] = np.fft.rfft(frame)
+            frame = audio[start:start + n_fft].astype(np.float64)
+            frame += np.random.uniform(-dither_amp, dither_amp, n_fft)
+            stft[:, i] = np.fft.rfft(frame * window)
         
-        # Estimate noise threshold from noise floor
-        noise_threshold = 10 ** (noise_floor_db / 20) * 2
-        
-        # Spectral gating: suppress bins below noise threshold
         mag = np.abs(stft)
         phase = np.angle(stft)
         
-        # Wiener-like gain: G = max(1 - noise/signal, floor)
-        gain = np.maximum(1 - noise_threshold / (mag + 1e-10), 0.1)
-        clean_mag = mag * gain
+        # ── Per-band Wiener gain ──────────────────────────────────────
+        gain = np.ones_like(mag)
+        bounds = self._band_boundaries
+        floors = self._band_floors
         
-        # Reconstruct
-        clean_stft = clean_mag * np.exp(1j * phase)
+        for b in range(len(floors)):
+            lo, hi = bounds[b], bounds[b + 1]
+            if lo >= hi:
+                continue
+            
+            band_mag = mag[lo:hi, :]           # (bins_b, frames)
+            band_power = band_mag ** 2         # (bins_b, frames)
+            
+            # Per-frame SNR in this band
+            signal_power = np.mean(band_power, axis=0) + 1e-12   # (frames,)
+            
+            # Wiener gain per frame: G = max(1 - P_noise / P_signal, floor)
+            # Broadcast noise reference across bands
+            wiener_g = np.maximum(
+                1.0 - noise_power_ref / signal_power,
+                floors[b],
+            )  # (frames,) — scalar broadcast to (bins_b, frames)
+            
+            gain[lo:hi, :] = wiener_g[np.newaxis, :]
+        
+        # ── Apply gain + reconstruct ──────────────────────────────────
+        clean_stft = (mag * gain) * np.exp(1j * phase)
+        
         output = np.zeros(len(audio), dtype=np.float32)
         window_sum = np.zeros(len(audio), dtype=np.float32)
         
@@ -213,20 +289,59 @@ class DynamicResourceScaler:
         mask = window_sum > 1e-8
         output[mask] /= window_sum[mask]
         
+        # Final peak normalize
+        output = self._peak_normalize(output, target=0.9)
         return output
     
-    def _prepare_mode_c(self, audio: np.ndarray) -> np.ndarray:
-        """Mode C: Heavy overlap — pass audio as-is.
-        
-        TIGER handles the separation, so we don't want to distort
-        the signal with additional processing. Just ensure proper scaling.
-        """
-        # Ensure audio is in [-1, 1] range for TIGER
-        peak = np.abs(audio).max()
-        if peak > 1.0:
-            audio = audio / peak
-        return audio
+    # ── Mode C: Heavy overlap — pass to TIGER ─────────────────────────────
     
+    def _prepare_mode_c(self, audio: np.ndarray) -> np.ndarray:
+        """Mode C: Heavy overlap — minimal processing for TIGER compatibility.
+        
+        TIGER handles the separation, so we MUST NOT distort the signal
+        with spectral filtering (it would corrupt the mixing matrix).
+        We only ensure the signal is in a known amplitude range.
+        """
+        # Normalize peak to exactly 0.9 for TIGER's expected input range
+        return self._peak_normalize(audio, target=0.9)
+    
+    # ── Shared DSP Utilities ──────────────────────────────────────────────
+    
+    def _peak_normalize(self, audio: np.ndarray, target: float = 0.9) -> np.ndarray:
+        """Normalize so the peak amplitude equals `target`."""
+        peak = float(np.abs(audio).max())
+        if peak < 1e-8:
+            return audio  # Near-silence — don't amplify
+        return (audio * (target / peak)).astype(np.float32)
+    
+    def _highpass_filter(self, audio: np.ndarray, cutoff_hz: float) -> np.ndarray:
+        """Simple single-pole high-pass IIR filter.
+        
+        y[n] = α * (y[n-1] + x[n] - x[n-1])
+        
+        Removes DC drift and low-frequency rumble (HVAC, mic stand vibration).
+        
+        Args:
+            audio: float32 input audio.
+            cutoff_hz: -3 dB cutoff frequency in Hz.
+            
+        Returns:
+            Filtered float32 audio.
+        """
+        sr = self.config.sample_rate
+        # α for a single-pole HPF
+        rc = 1.0 / (2.0 * np.pi * cutoff_hz)
+        dt = 1.0 / sr
+        alpha = rc / (rc + dt)
+        
+        y = np.empty_like(audio, dtype=np.float64)
+        x = audio.astype(np.float64)
+        y[0] = x[0]
+        for n in range(1, len(x)):
+            y[n] = alpha * (y[n - 1] + x[n] - x[n - 1])
+        
+        return y.astype(np.float32)
+
     @property
     def stats(self) -> dict:
         """Get routing statistics."""
@@ -263,7 +378,7 @@ if __name__ == "__main__":
         duration_s=1.0,
     )
     scene = SceneAnalysis(
-        scene_complexity_score=0.15,
+        scene_complexity_score=0.12,
         estimated_speaker_count=1,
         overlap_probability=0.0,
         noise_level_normalized=0.1,
@@ -277,4 +392,22 @@ if __name__ == "__main__":
     print(f"Decision: {decision}")
     print(f"Dict: {decision.to_dict()}")
     print(f"Stats: {scaler.stats}")
+
+    # Test Mode B (noisy)
+    scene_b = SceneAnalysis(
+        scene_complexity_score=0.28,
+        estimated_speaker_count=1,
+        overlap_probability=0.1,
+        noise_level_normalized=0.35,
+        is_directed_speech=True,
+        mode=PipelineMode.MODE_B,
+    )
+    preprocessed_b = PreProcessedAudio(
+        audio=np.random.randn(24000).astype(np.float32) * 0.3,
+        original_audio=np.random.randn(24000).astype(np.float32) * 0.3,
+        snr_estimate_db=18.0,
+        noise_floor_db=-38.0,
+    )
+    dec_b = scaler.decide(preprocessed_b, features, scene_b, vad, ww)
+    print(f"\nMode B Decision: {dec_b}")
     print("DynamicResourceScaler test passed!")

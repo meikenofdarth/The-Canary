@@ -151,31 +151,32 @@ class FileAudioSource:
             audio, sr = librosa.load(
                 str(self.file_path),
                 sr=self.config.sample_rate,
-                mono=True,
+                mono=False,
             )
+            if audio.ndim > 1:
+                audio = audio.T
         else:
             # WAV / AIFF / etc. via soundfile (no ffmpeg needed)
             audio, sr = sf.read(str(self.file_path), dtype="float32")
-            # Convert to mono if stereo
-            if audio.ndim > 1:
-                audio = audio.mean(axis=1)
             # Resample if needed
             if sr != self.config.sample_rate:
                 import librosa
 
                 audio = librosa.resample(
-                    audio, orig_sr=sr, target_sr=self.config.sample_rate
+                    audio, orig_sr=sr, target_sr=self.config.sample_rate, axis=0
                 )
                 sr = self.config.sample_rate
 
         self._audio = audio.astype(np.float32)
         self._sample_rate = self.config.sample_rate
+        duration = len(self._audio) / self.config.sample_rate
         logger.info(
-            "Loaded %s (%s): %.2fs @ %dHz",
+            "Loaded %s (%s): %.2fs @ %dHz (channels=%d)",
             self.file_path.name,
             ext,
-            len(self._audio) / self.config.sample_rate,
+            duration,
             self.config.sample_rate,
+            audio.shape[1] if audio.ndim > 1 else 1,
         )
 
     def get_audio(self, duration_s: float = 0) -> np.ndarray:

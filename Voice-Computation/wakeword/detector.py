@@ -171,17 +171,20 @@ class WakeWordDetector:
         """
         if self._bypass:
             return WakeWordResult(
-                detected=True, confidence=1.0, keyword="bypass", transcript="bypass"
+                detected=True, confidence=1.0, keyword="bypass",
+                transcript="bypass", stt_backend="bypass"
             )
 
         energy_threshold = getattr(self.config, "wakeword_energy_threshold", 0.01)
         rms = float(np.sqrt(np.mean(audio_chunk**2) + 1e-12))
         if rms < energy_threshold:
-            return WakeWordResult(detected=False, confidence=0.0)
+            return WakeWordResult(detected=False, confidence=0.0,
+                                  stt_backend="acoustic-fallback")
 
         # Short chunks — not enough to transcribe reliably, return pending
         if len(audio_chunk) < int(self.config.sample_rate * 0.25):
-            return WakeWordResult(detected=False, confidence=rms)
+            return WakeWordResult(detected=False, confidence=rms,
+                                  stt_backend="acoustic-fallback")
 
         return self.process_audio(audio_chunk)
 
@@ -196,15 +199,19 @@ class WakeWordDetector:
           5. Search transcript for keyword variants
           6. Debounce & update cache with detection result
 
+        When no STT backend is available (acoustic-fallback), sets
+        stt_backend='acoustic-fallback' so pipeline.py can engage VAD fallback.
+
         Args:
             audio: float32 mono @ 16 kHz, any length.
 
         Returns:
-            WakeWordResult with detected, confidence, keyword, transcript.
+            WakeWordResult with detected, confidence, keyword, transcript, stt_backend.
         """
         if self._bypass:
             return WakeWordResult(
-                detected=True, confidence=1.0, keyword="bypass", transcript="bypass"
+                detected=True, confidence=1.0, keyword="bypass",
+                transcript="bypass", stt_backend="bypass"
             )
 
         # ── Noise measurement ────────────────────────────────────────────
@@ -215,6 +222,24 @@ class WakeWordDetector:
         transcript_lower = transcript.lower().strip()
 
         logger.debug("STT [%s]: '%s'", method, transcript_lower)
+
+        # ── Acoustic fallback: use RMS as a proxy confidence ─────────────
+        # When no STT ran, return early with fallback marker so the pipeline
+        # can decide whether to engage the VAD-based soft gate instead.
+        if method == "acoustic-fallback":
+            # Clamp RMS to [0, 1] range as a rough confidence proxy
+            fallback_conf = float(np.clip(rms * 10, 0.0, 1.0))
+            logger.debug(
+                "STT acoustic-fallback: rms=%.4f → confidence=%.3f",
+                rms, fallback_conf
+            )
+            return WakeWordResult(
+                detected=False,
+                confidence=fallback_conf,
+                keyword="",
+                transcript="",
+                stt_backend="acoustic-fallback",
+            )
 
         # ── Write to binary cache ────────────────────────────────────────
         cache = _cache_read()
@@ -267,6 +292,7 @@ class WakeWordDetector:
             confidence=confidence,
             keyword=detected_kw,
             transcript=parsed_transcript,
+            stt_backend=method,
         )
 
     def reset(self) -> None:

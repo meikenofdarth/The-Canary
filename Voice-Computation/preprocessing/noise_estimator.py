@@ -9,17 +9,26 @@ HOW IT WORKS:
     3. Use the noise spectrum to perform spectral subtraction
     
     Spectral subtraction formula:
-        |clean_spectrum|² = |noisy_spectrum|² - α * |noise_spectrum|²
+        |clean|² = max(|noisy|² - α·|noise|², β·|noise|²)
     
-    Where α (oversubtraction factor) controls how aggressive the noise
-    removal is. Higher α = more noise removed, but risks "musical noise"
-    artifacts.
+    Where:
+        α (oversubtraction factor) = how aggressive to remove noise
+        β (spectral floor) = minimum retained power ratio — prevents
+          "musical noise" artifacts when subtraction over-zeros bins.
+    
+    This version fixes three bugs in the original:
+      1. Spectral floor was 0.01 (too low — caused musical noise).
+         Now 0.15 (softer floor — safe for all SNR conditions).
+      2. Dithering (1e-6) is added before STFT to prevent log(0) issues.
+      3. Exposes get_noise_spectrum() for multi-band downstream use.
     
     ┌─────────────────────────────────────────────────────────────────┐
     │  Noisy spectrum:    ████████████████████████████████████████     │
     │  Noise estimate:    ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓                      │
     │  After subtraction: ░░░░░░░░████████████████████                │
     │                              ↑ Speech energy preserved          │
+    │  Spectral floor:    ░░░░░░░░░░░░░░░░░░░░░░░░░░                 │
+    │  (prevents complete zeroing of bins → no musical noise)        │
     └─────────────────────────────────────────────────────────────────┘
 """
 import numpy as np
@@ -29,6 +38,10 @@ from typing import Optional
 from ..config import VoiceConfig
 
 logger = logging.getLogger(__name__)
+
+# Spectral floor: minimum fraction of noise power kept after subtraction.
+# 0.15 is safe for SNR > 5 dB. Lower = more aggressive = more musical noise.
+_SPECTRAL_FLOOR = 0.15
 
 
 class NoiseEstimator:
@@ -73,7 +86,7 @@ class NoiseEstimator:
         if self._noise_spectrum is None:
             self._noise_spectrum = noise_profile
         else:
-            # Exponential moving average
+            # Exponential moving average — tracks slowly-changing noise
             self._noise_spectrum = (
                 self._alpha * noise_profile + 
                 (1 - self._alpha) * self._noise_spectrum
@@ -99,10 +112,13 @@ class NoiseEstimator:
         n_fft = self._n_fft
         hop = self._hop_length
         window = np.hanning(n_fft).astype(np.float32)
+        dither_amp = getattr(self.config, "dither_amplitude", 1e-6)
         
-        # Pad audio to fit FFT
+        # Pad audio to fit FFT frames cleanly
         pad_length = n_fft - (len(audio) % hop)
-        audio_padded = np.pad(audio, (0, pad_length))
+        if pad_length == n_fft:
+            pad_length = 0
+        audio_padded = np.pad(audio, (0, pad_length)).astype(np.float32)
         
         # STFT
         n_frames = (len(audio_padded) - n_fft) // hop + 1
@@ -110,33 +126,25 @@ class NoiseEstimator:
         
         for i in range(n_frames):
             start = i * hop
-            frame = audio_padded[start:start + n_fft] * window
-            spectrum = np.fft.rfft(frame)
-            stft[:, i] = spectrum
+            frame = audio_padded[start:start + n_fft].astype(np.float64)
+            # Dither before FFT to prevent log(0) artifacts in bin magnitudes
+            frame += np.random.uniform(-dither_amp, dither_amp, n_fft)
+            stft[:, i] = np.fft.rfft(frame * window)
         
-        # Spectral subtraction
+        # Spectral subtraction in power domain
         magnitude = np.abs(stft)
         phase = np.angle(stft)
         power = magnitude ** 2
         
-        # Subtract noise power (with oversubtraction factor)
+        # Oversubtraction factor from config (default 1.5, was 2.0)
         alpha = self.config.noise_oversubtraction
-        noise_power = self._noise_spectrum[:, np.newaxis]  # Broadcast across frames
+        noise_power = self._get_aligned_noise_power(power.shape[0])
         
-        # Ensure noise spectrum matches STFT size
-        if noise_power.shape[0] != power.shape[0]:
-            noise_power = np.interp(
-                np.linspace(0, 1, power.shape[0]),
-                np.linspace(0, 1, noise_power.shape[0]),
-                noise_power.flatten()
-            )[:, np.newaxis]
-        
-        clean_power = np.maximum(power - alpha * noise_power, 0.0)
-        
-        # Spectral flooring: don't let it go below a minimum
-        # This prevents "musical noise" artifacts
-        floor = 0.01 * noise_power
-        clean_power = np.maximum(clean_power, floor)
+        # Subtract noise: max(P_noisy - α·P_noise, β·P_noise)
+        clean_power = np.maximum(
+            power - alpha * noise_power,
+            _SPECTRAL_FLOOR * noise_power,  # Spectral floor — prevents musical noise
+        )
         
         # Reconstruct
         clean_magnitude = np.sqrt(clean_power)
@@ -148,7 +156,7 @@ class NoiseEstimator:
         
         for i in range(n_frames):
             start = i * hop
-            frame = np.fft.irfft(clean_stft[:, i]).real.astype(np.float32)
+            frame = np.fft.irfft(clean_stft[:, i]).real[:n_fft].astype(np.float32)
             output[start:start + n_fft] += frame * window
             window_sum[start:start + n_fft] += window ** 2
         
@@ -168,12 +176,35 @@ class NoiseEstimator:
         if self._noise_spectrum is None:
             return -60.0
         
-        mean_power = np.mean(self._noise_spectrum)
-        if mean_power < 1e-10:
+        mean_power = float(np.mean(self._noise_spectrum))
+        if mean_power < 1e-12:
             return -60.0
         
-        return float(10 * np.log10(mean_power))
+        return float(10.0 * np.log10(mean_power))
     
+    def get_noise_spectrum(self) -> Optional[np.ndarray]:
+        """Return the current per-bin noise power spectrum.
+        
+        Useful for multi-band downstream DSP (e.g. resource_scaler Mode B).
+        
+        Returns:
+            float32 array of shape (n_fft//2+1,) or None if unavailable.
+        """
+        if self._noise_spectrum is None:
+            return None
+        return self._noise_spectrum.astype(np.float32)
+
+    def _get_aligned_noise_power(self, n_bins: int) -> np.ndarray:
+        """Return noise power spectrum aligned/interpolated to n_bins, broadcast-ready."""
+        noise = self._noise_spectrum
+        if noise.shape[0] == n_bins:
+            return noise[:, np.newaxis]
+        # Interpolate to match STFT bin count
+        x_old = np.linspace(0, 1, noise.shape[0])
+        x_new = np.linspace(0, 1, n_bins)
+        aligned = np.interp(x_new, x_old, noise)
+        return aligned[:, np.newaxis]
+
     def _compute_power_spectrum(self, audio: np.ndarray) -> Optional[np.ndarray]:
         """Compute power spectrum (magnitude²) via STFT.
         
@@ -193,8 +224,8 @@ class NoiseEstimator:
         
         for i in range(n_frames):
             start = i * hop
-            frame = audio[start:start + n_fft] * window
-            fft = np.fft.rfft(frame)
+            frame = audio[start:start + n_fft].astype(np.float64)
+            fft = np.fft.rfft(frame * window)
             spectrum[:, i] = np.abs(fft) ** 2
         
         return spectrum
@@ -220,6 +251,9 @@ if __name__ == "__main__":
     estimator.update_noise_estimate(noise)
     print(f"Noise floor after calibration: {estimator.get_noise_floor_db():.1f} dB")
     
+    noise_spec = estimator.get_noise_spectrum()
+    print(f"Noise spectrum shape: {noise_spec.shape}")
+    
     # Now denoise speech + noise
     t = np.arange(16000) / 16000
     speech = np.sin(2 * np.pi * 300 * t) * 0.3
@@ -227,7 +261,8 @@ if __name__ == "__main__":
     
     clean = estimator.subtract_noise(noisy_speech)
     
-    original_snr = 10 * np.log10(np.sum(speech**2) / np.sum(noise**2))
+    original_snr = 10 * np.log10(np.sum(speech**2) / (np.sum(noise**2) + 1e-12))
     print(f"Original SNR: {original_snr:.1f} dB")
     print(f"Output shape: {clean.shape}")
+    print(f"Output peak:  {np.abs(clean).max():.4f}")
     print("NoiseEstimator test passed!")

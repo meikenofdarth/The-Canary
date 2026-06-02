@@ -36,6 +36,8 @@ from .preprocessing.noise_estimator import NoiseEstimator
 from .preprocessing.normalizer import AudioNormalizer
 from .scaler.resource_scaler import DynamicResourceScaler
 from .scene.analyzer import SceneAnalyzer
+from .separation.speaker_analyzer import SpeakerAcousticAnalyzer
+from .separation.spectral_separator import SpectralSpeakerSeparator
 from .vad.silero_vad import SileroVAD
 from .wakeword.detector import WakeWordDetector
 
@@ -56,6 +58,10 @@ class VoiceComputationPipeline:
         self._init_modules()
         self._is_activated = False  # Whether wake-word has been detected
 
+        # Last stage results (read by demo.py to avoid re-running)
+        self.last_vad_result: Optional[VADResult] = None
+        self.last_wakeword_result: Optional[WakeWordResult] = None
+
         # Metrics
         self._total_chunks = 0
         self._total_activations = 0
@@ -71,6 +77,8 @@ class VoiceComputationPipeline:
         self.noise_estimator = NoiseEstimator(self.config)
         self.feature_extractor = FeatureExtractor(self.config)
         self.scene_analyzer = SceneAnalyzer(self.config)
+        self.speaker_analyzer = SpeakerAcousticAnalyzer(self.config)
+        self.spectral_separator = SpectralSpeakerSeparator(self.config)
         self.resource_scaler = DynamicResourceScaler(self.config)
 
         logger.info("Voice-Computation pipeline initialized")
@@ -81,8 +89,7 @@ class VoiceComputationPipeline:
         This is the main entry point for processing audio.
 
         Args:
-            audio: float32 numpy array @ 16kHz. Can be any length,
-                   but 1-2 seconds is ideal.
+            audio: float32 numpy array @ 16kHz. Can be mono or stereo.
 
         Returns:
             ScalerDecision if audio should be processed downstream.
@@ -91,80 +98,176 @@ class VoiceComputationPipeline:
         start_time = time.time()
         self._total_chunks += 1
 
+        # Check if the input is stereo, and extract mono for Stage 0 gates
+        is_stereo = audio.ndim > 1 and audio.shape[1] == 2
+        mono_audio = audio.mean(axis=1) if is_stereo else audio
+
         # ── Stage 0: VAD Gate ──────────────────────────────────────
-        vad_result = self.vad.process_audio(audio)
+        vad_result = self.vad.process_audio(mono_audio)
 
         # Store VAD results to binary pipeline cache
-        from .wakeword.detector import _cache_read, _cache_write, _cache_delete
+        from .wakeword.detector import _cache_delete, _cache_read, _cache_write
+
         cache = _cache_read()
-        cache.update({
-            "speech_probability": vad_result.speech_probability,
-            "vad_confidence": vad_result.speech_probability,
-            "noise_floor_db": vad_result.noise_floor_db,
-        })
+        cache.update(
+            {
+                "speech_probability": vad_result.speech_probability,
+                "vad_confidence": vad_result.speech_probability,
+                "noise_floor_db": vad_result.noise_floor_db,
+            }
+        )
         _cache_write(cache)
 
-        # ── Stage 0: Wake-Word Gate ────────────────────────────────
-        wakeword_result = self.wakeword.process_audio(audio)
+        # Hard gate: pure silence with no activation history → skip everything.
+        bypass_mode = self.config.wakeword_threshold <= 0
+        if not bypass_mode and not vad_result.is_speech and not self._is_activated:
+            # Give the wakeword STT a chance to override the VAD silence gate
+            wakeword_result = self.wakeword.process_audio(mono_audio)
+            self.last_vad_result = vad_result
+            self.last_wakeword_result = wakeword_result
 
-        # Wake-word detection bypasses the VAD gate. If wake word is not detected,
-        # and VAD says no speech, drop it.
-        if not wakeword_result.detected and not self._is_activated:
-            if not vad_result.is_speech:
-                # No speech and no wake-word → update noise estimate and stay idle
-                self.noise_estimator.update_noise_estimate(audio)
+            # Require: non-empty transcript + wakeword confidence >= threshold
+            # and minimum audio RMS energy to accept the STT override.
+            rms = float(np.sqrt(np.mean(mono_audio**2) + 1e-12))
+            stt_transcript = (wakeword_result.transcript or "").strip()
+            stt_conf_ok = wakeword_result.confidence >= getattr(
+                self.config, "wakeword_threshold", 0.5
+            )
+            energy_ok = rms >= getattr(self.config, "wakeword_energy_threshold", 0.01)
+
+            if not (stt_transcript and stt_conf_ok and energy_ok):
+                # Not enough evidence — update noise model and drop
+                self.noise_estimator.update_noise_estimate(mono_audio)
                 self._total_drops += 1
                 logger.debug(
-                    "VAD: No speech detected (prob=%.3f)", vad_result.speech_probability
+                    "VAD+STT: No speech detected (vad_prob=%.3f, stt='%s', conf=%.3f, rms=%.4f)",
+                    vad_result.speech_probability,
+                    stt_transcript,
+                    wakeword_result.confidence,
+                    rms,
                 )
                 _cache_delete()
                 return None
 
-            # Speech but no wake-word → ambient conversation
+            # STT override accepted — proceed to activation
+            goto_activation = True
+        else:
+            goto_activation = False
+
+        # ── Stage 0: Wake-Word Gate ────────────────────────────────
+        if not goto_activation:
+            wakeword_result = self.wakeword.process_audio(mono_audio)
+            self.last_vad_result = vad_result
+            self.last_wakeword_result = wakeword_result
+
+        # ── Activation Logic ───────────────────────────────────────
+        gate_passed = False
+
+        if wakeword_result.detected:
+            rms = float(np.sqrt(np.mean(mono_audio**2) + 1e-12))
+            conf_ok = wakeword_result.confidence >= getattr(
+                self.config, "wakeword_threshold", 0.5
+            )
+            energy_ok = rms >= getattr(self.config, "wakeword_energy_threshold", 0.01)
+            vad_ok = (
+                vad_result.speech_probability
+                >= getattr(self.config, "vad_threshold", 0.5) * 0.5
+            )
+
+            if conf_ok and (energy_ok or vad_ok):
+                gate_passed = True
+                self._is_activated = True
+                self._total_activations += 1
+                logger.info(
+                    "ACTIVATED by wake-word '%s' (conf=%.3f, rms=%.4f)",
+                    wakeword_result.keyword,
+                    wakeword_result.confidence,
+                    rms,
+                )
+            else:
+                # Not confident enough to activate
+                logger.debug(
+                    "Wake-word ignored (conf=%.3f, rms=%.4f, vad=%.3f)",
+                    wakeword_result.confidence,
+                    rms,
+                    vad_result.speech_probability,
+                )
+
+        elif self._is_activated:
+            gate_passed = True
+            logger.debug("Continuing under existing activation")
+
+        elif (
+            self.config.wakeword_fallback_to_vad
+            and wakeword_result.stt_backend == "acoustic-fallback"
+            and vad_result.speech_probability
+            >= self.config.wakeword_fallback_vad_threshold
+        ):
+            gate_passed = True
+            self._is_activated = True
+            self._total_activations += 1
+            logger.info(
+                "ACTIVATED via VAD fallback (no STT backend, vad_prob=%.3f)",
+                vad_result.speech_probability,
+            )
+
+        if not gate_passed:
             self._total_drops += 1
             logger.debug(
-                "Wake-word not detected (conf=%.3f)", wakeword_result.confidence
+                "Wake-word not detected (conf=%.3f, backend=%s)",
+                wakeword_result.confidence,
+                getattr(wakeword_result, "stt_backend", "?"),
             )
             _cache_delete()
             return None
 
-        if wakeword_result.detected:
-            self._is_activated = True
-            self._total_activations += 1
-            logger.info(
-                "ACTIVATED by wake-word '%s' (conf=%.3f)",
-                wakeword_result.keyword,
-                wakeword_result.confidence,
-            )
-
-        # ── Pre-Processing ─────────────────────────────────────────
-        # Normalize audio
-        preprocessed = self.normalizer.process(audio)
-        preprocessed.noise_floor_db = vad_result.noise_floor_db
+        # ── Pre-Processing (Mono) ──────────────────────────────────
+        preprocessed_mono = self.normalizer.process(mono_audio)
+        preprocessed_mono.noise_floor_db = vad_result.noise_floor_db
 
         # Apply noise subtraction if we have a noise estimate
         if self.noise_estimator.has_estimate:
-            preprocessed.audio = self.noise_estimator.subtract_noise(preprocessed.audio)
-            preprocessed.noise_floor_db = self.noise_estimator.get_noise_floor_db()
+            preprocessed_mono.audio = self.noise_estimator.subtract_noise(preprocessed_mono.audio)
+            preprocessed_mono.noise_floor_db = self.noise_estimator.get_noise_floor_db()
 
         # ── Feature Extraction ─────────────────────────────────────
-        features = self.feature_extractor.extract(preprocessed.audio)
+        features = self.feature_extractor.extract(preprocessed_mono.audio)
+
+        # ── Pre-estimate Speaker Count & Overlap ───────────────────
+        est_speaker_count = self.scene_analyzer._estimate_speaker_count(features)
+        overlap_prob = self.scene_analyzer._estimate_overlap_probability(features, est_speaker_count)
+
+        # ── Separation (Separation-First) ──────────────────────────
+        if is_stereo:
+            separation = self.spectral_separator.process(audio)
+        else:
+            separation = self.spectral_separator.process(preprocessed_mono.audio, overlap_probability=overlap_prob)
+
+        # ── Post-Separation Speaker Analysis & Diarization ─────────
+        if separation.speaker_streams:
+            speaker_analysis = self.speaker_analyzer.analyze_separated(separation.speaker_streams)
+        else:
+            speaker_analysis = self.speaker_analyzer.analyze_separated([preprocessed_mono.audio])
 
         # ── Scene Analysis ─────────────────────────────────────────
         scene = self.scene_analyzer.analyze(
             features=features,
             vad_confidence=vad_result.speech_probability,
             wakeword_confidence=wakeword_result.confidence,
-            noise_floor_db=preprocessed.noise_floor_db,
+            noise_floor_db=preprocessed_mono.noise_floor_db,
+            wakeword_available=(wakeword_result.stt_backend != "acoustic-fallback"),
+            speaker_analysis=speaker_analysis,
         )
 
         # ── Dynamic Resource Scaler ────────────────────────────────
         decision = self.resource_scaler.decide(
-            preprocessed=preprocessed,
+            preprocessed=preprocessed_mono,
             features=features,
             scene=scene,
             vad_result=vad_result,
             wakeword_result=wakeword_result,
+            speaker_analysis=speaker_analysis,
+            separation=separation,
         )
 
         elapsed_ms = (time.time() - start_time) * 1000

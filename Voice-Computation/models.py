@@ -33,6 +33,7 @@ class WakeWordResult:
     keyword: str = ""  # Which wake-word was detected
     consecutive_hits: int = 0  # How many consecutive frames detected it
     transcript: str = ""        # STT transcript that triggered detection
+    stt_backend: str = "unknown"  # Backend that ran: google / whisper / acoustic-fallback
 
 
 @dataclass
@@ -115,6 +116,9 @@ class ScalerDecision:
     # Features (optional, for downstream use)
     mel_spectrogram: Optional[np.ndarray] = None
     energy_profile: Optional[np.ndarray] = None
+    separated_audio: list[np.ndarray] = field(default_factory=list)
+    separation_method: str = "none"
+    speaker_profiles: list[dict] = field(default_factory=list)
 
     def to_dict(self) -> dict:
         """Serialize to dict for logging / JSON output."""
@@ -130,6 +134,9 @@ class ScalerDecision:
             "snr_estimate_db": round(self.snr_estimate_db, 2),
             "is_directed_speech": self.is_directed_speech,
             "audio_duration_s": round(len(self.audio) / 16000, 3),
+            "separation_method": self.separation_method,
+            "separated_stream_count": len(self.separated_audio),
+            "speaker_profiles": self.speaker_profiles,
         }
 
     def __repr__(self) -> str:

@@ -15,9 +15,9 @@ HOW IT WORKS:
         - w1, w2, w3: Configurable weights (default 0.4, 0.35, 0.25)
     
     Mode Routing:
-        SCS < 0.20  → MODE A (clean, single speaker → skip separation)
-        0.20 ≤ SCS < 0.45 → MODE B (moderate → adaptive DSP)
-        SCS ≥ 0.45 → MODE C (heavy overlap → full TIGER separation)
+        SCS < 0.22  → MODE A (clean, single speaker → skip separation)
+        0.22 ≤ SCS < 0.40 → MODE B (moderate → adaptive DSP)
+        SCS ≥ 0.40 → MODE C (heavy overlap → local fallback + TIGER handoff)
     
     Speaker Count Estimation:
         Uses energy variance analysis. Multiple speakers cause rapid
@@ -31,9 +31,11 @@ HOW IT WORKS:
 """
 import numpy as np
 import logging
+from typing import Optional
 
 from ..config import VoiceConfig, PipelineMode
 from ..models import AudioFeatures, SceneAnalysis
+from ..separation.speaker_analyzer import SpeakerAnalysis
 
 logger = logging.getLogger(__name__)
 
@@ -54,6 +56,8 @@ class SceneAnalyzer:
         vad_confidence: float,
         wakeword_confidence: float,
         noise_floor_db: float,
+        wakeword_available: bool = True,
+        speaker_analysis: Optional[SpeakerAnalysis] = None,
     ) -> SceneAnalysis:
         """Analyze the acoustic scene and determine the processing mode.
         
@@ -62,28 +66,32 @@ class SceneAnalyzer:
             vad_confidence: VAD speech probability [0, 1].
             wakeword_confidence: Wake-word detection confidence [0, 1].
             noise_floor_db: Estimated noise floor in dB.
+            wakeword_available: Whether a real STT backend ran.
+                If False (acoustic-fallback), wakeword_confidence is treated as
+                neutral (0.5) in the SCS formula to avoid penalising offline runs.
             
         Returns:
             SceneAnalysis with complexity score and routing decision.
         """
-        # Redirect inputs from binary pipeline cache
+        # Keep the cache as an output trace only. Direct function inputs are the
+        # source of truth; rereading a shared temp file here caused stale metrics
+        # when two recordings were processed close together.
         from ..wakeword.detector import _cache_read, _cache_write
-        cached = _cache_read()
-        if cached:
-            if "speech_probability" in cached:
-                vad_confidence = cached["speech_probability"]
-            elif "vad_confidence" in cached:
-                vad_confidence = cached["vad_confidence"]
-            if "wakeword_confidence" in cached:
-                wakeword_confidence = cached["wakeword_confidence"]
-            if "noise_floor_db" in cached:
-                noise_floor_db = cached["noise_floor_db"]
 
-        # 1. Estimate speaker count
-        speaker_count = self._estimate_speaker_count(features)
+        # 1. Estimate speaker count. Prefer the dedicated pitch/frequency/
+        # intensity analyzer when the full waveform is available.
+        speaker_count = (
+            speaker_analysis.estimated_speaker_count
+            if speaker_analysis is not None
+            else self._estimate_speaker_count(features)
+        )
         
         # 2. Estimate overlap probability
-        overlap_prob = self._estimate_overlap_probability(features, speaker_count)
+        overlap_prob = (
+            speaker_analysis.overlap_probability
+            if speaker_analysis is not None
+            else self._estimate_overlap_probability(features, speaker_count)
+        )
         
         # 3. Normalize noise level to [0, 1]
         noise_normalized = self._normalize_noise(noise_floor_db)
@@ -94,8 +102,11 @@ class SceneAnalyzer:
         )
         
         # 5. Compute Scene Complexity Score
+        # If wakeword_available=False, we have no real confidence signal, so
+        # use 0.5 (neutral) instead of penalising with (1 - 0.0) = 1.0.
+        effective_ww_conf = wakeword_confidence if wakeword_available else 0.5
         scs = self._compute_scs(
-            overlap_prob, noise_normalized, wakeword_confidence
+            overlap_prob, noise_normalized, effective_ww_conf
         )
         
         # 6. Determine mode
@@ -103,9 +114,9 @@ class SceneAnalyzer:
         
         logger.info(
             "Scene Analysis: SCS=%.3f, mode=%s, speakers=%d, "
-            "overlap=%.3f, noise=%.3f, directed=%s",
+            "overlap=%.3f, noise=%.3f, directed=%s, ww_avail=%s",
             scs, mode.value, speaker_count, overlap_prob,
-            noise_normalized, is_directed
+            noise_normalized, is_directed, wakeword_available
         )
 
         # Update binary cache with analysis results
@@ -132,9 +143,9 @@ class SceneAnalyzer:
     def _estimate_speaker_count(self, features: AudioFeatures) -> int:
         """Estimate the number of active speakers from audio features.
         
-        Heuristic approach using energy variance and spectral analysis:
+        Heuristic approach using energy variance, spectral analysis, and pitch:
         
-        - Single speaker: energy contour is relatively smooth
+        - Single speaker: energy contour is relatively smooth, pitch is coherent
         - Multiple speakers: energy has high variance due to turn-taking
           and overlap, plus the spectral centroid varies more widely
         
@@ -173,12 +184,30 @@ class SceneAnalyzer:
             0.3 * min(transition_rate / 0.3, 1.0)  # Transition density
         )
         
-        if speaker_score < 0.3:
-            return 1
-        elif speaker_score < 0.65:
-            return 2
-        else:
-            return 3
+        # Energy variation is a useful warning signal, but normal pauses in one
+        # person's speech also create a high score. Only claim multiple speakers
+        # when pitch supplies a second, independent signal.
+        raw_count = 2 if speaker_score >= 0.65 else 1
+
+        if raw_count == 2 and features.pitch_hz is not None:
+            voiced = features.pitch_hz[features.pitch_hz > 0]
+            if len(voiced) >= 6:
+                # Sort voiced frames and look for a bimodal distribution
+                voiced_sorted = np.sort(voiced)
+                # Compute gradient — large jumps suggest two pitch clusters
+                diffs = np.diff(voiced_sorted)
+                max_gap = float(np.max(diffs)) if len(diffs) > 0 else 0.0
+                pitch_range = float(voiced_sorted[-1] - voiced_sorted[0])
+                # A pronounced gap in the sorted distribution suggests two
+                # distinct pitch clusters.
+                if pitch_range > 80 and max_gap / (pitch_range + 1e-6) > 0.18:
+                    raw_count = 2  # Confirmed two speakers
+                else:
+                    raw_count = 1
+            else:
+                raw_count = 1
+
+        return raw_count
     
     def _estimate_overlap_probability(
         self, features: AudioFeatures, speaker_count: int
@@ -289,9 +318,9 @@ class SceneAnalyzer:
     def _determine_mode(self, scs: float) -> PipelineMode:
         """Map SCS to processing mode.
         
-        Mode A (< 0.20): Clean, single speaker → minimal processing
-        Mode B (0.20-0.45): Moderate complexity → adaptive DSP
-        Mode C (≥ 0.45): Heavy overlap/noise → full separation
+        Mode A (< 0.22): Clean, single speaker → minimal processing
+        Mode B (0.22-0.40): Moderate complexity → adaptive DSP
+        Mode C (≥ 0.40): Heavy overlap/noise → separation fallback
         """
         if scs < self.config.scs_threshold_a:
             return PipelineMode.MODE_A

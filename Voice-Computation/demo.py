@@ -65,14 +65,28 @@ def print_result(
         )
     else:
         ww_status = "NO"
-    print(_line("Speech detected", "YES  (prob={:.3f})".format(vad_prob)))
+    # --- Speech detected ---
+    stt_confirmed = bool(ww_transcript.strip())
+    if stt_confirmed:
+        speech_status = "YES  (STT confirmed — VAD prob={:.3f})".format(vad_prob)
+    elif vad_prob >= 0.5:
+        speech_status = "YES  (VAD prob={:.3f})".format(vad_prob)
+    else:
+        speech_status = "NO   (VAD prob={:.3f})".format(vad_prob)
+    print(_line("Speech detected", speech_status))
     print(_line("Wake word detected", ww_status))
+
     print()
 
     # --- Mode routing ---
     if decision is None:
+        if not wakeword_detected:
+            drop_reason = "Wake word not detected"
+        else:
+            drop_reason = "Filtered by pipeline (wakeword conf below threshold)"
         print(_line("Routing decision", "DROPPED"))
-        print(_line("Reason", "No speech / wake word not heard"))
+        print(_line("Mode", "—  (not routed)"))
+        print(_line("Reason", drop_reason))
         print(_line("Tip", "Use --bypass-wakeword to process all speech"))
     else:
         mode_val = decision.mode.value
@@ -80,7 +94,7 @@ def print_result(
         mode_desc = {
             "A": "Clean audio, single speaker  ->  direct ASR",
             "B": "Moderate noise / mild overlap  ->  adaptive DSP",
-            "C": "Heavy overlap / noisy  ->  full TIGER separation",
+            "C": "Heavy overlap / noisy  ->  local stems + TIGER-ready handoff",
         }.get(mode_val, "")
 
         scs_bar_len = 20
@@ -88,6 +102,7 @@ def print_result(
         filled = int(scs * scs_bar_len)
         scs_bar = "[" + "#" * filled + "." * (scs_bar_len - filled) + "]"
 
+        print(_line("Routing decision", "ACTIVATED"))
         print(_line("Mode", "{} ({})".format(mode_name, mode_val)))
         print(_line("Description", mode_desc))
         print()
@@ -97,12 +112,20 @@ def print_result(
         print(_line("Wake-word conf", "{:.3f}".format(decision.wakeword_confidence)))
         print(_line("Scene complexity", "{:.3f}  {}".format(scs, scs_bar)))
         cfg = pipeline.config if pipeline else VoiceConfig()
-        print(_line("  -> thresholds", "A < {:.2f}  |  {:.2f} <= B < {:.2f}  |  C >= {:.2f}".format(
-            cfg.scs_threshold_a, cfg.scs_threshold_a, cfg.scs_threshold_b, cfg.scs_threshold_b
-        )))
+        print(
+            _line(
+                "  -> thresholds",
+                "A < {:.2f}  |  {:.2f} <= B < {:.2f}  |  C >= {:.2f}".format(
+                    cfg.scs_threshold_a,
+                    cfg.scs_threshold_a,
+                    cfg.scs_threshold_b,
+                    cfg.scs_threshold_b,
+                ),
+            )
+        )
         print(_line("Speaker count", str(decision.estimated_speaker_count)))
         print(_line("Overlap prob", "{:.3f}".format(decision.overlap_probability)))
-        print(_line("Noise floor", "{:.1f} dB".format(decision.noise_floor_db)))
+        print(_line("Noise floor", "{:.1f} dBFS".format(decision.noise_floor_db)))
         print(_line("SNR estimate", "{:.1f} dB".format(decision.snr_estimate_db)))
         print(_line("Directed speech", str(decision.is_directed_speech)))
         print(_line("Audio duration", "{:.2f} s".format(audio_duration_s)))
@@ -123,11 +146,21 @@ def print_result(
 # ── Run modes ─────────────────────────────────────────────────────────────────
 
 
-def _save_recording(audio: np.ndarray, sample_rate: int) -> str:
-    """Save audio to a WAV file in Voice-Computation/audio/recordings/.
+def _save_pipeline_output(
+    decision: Optional["ScalerDecision"],
+    audio: np.ndarray,
+    sample_rate: int,
+    extra_meta: dict,
+) -> str:
+    """Save pipeline output to recordings/.
 
-    Returns the saved file path as a string.
+    Saves the raw WAV and JSON metadata for every run. Activated runs also save
+    the ScalerDecision pickle used by the downstream handoff.
+
+    Returns the base path (without extension).
     """
+    import json
+    import pickle
     from datetime import datetime
 
     import soundfile as sf
@@ -135,10 +168,51 @@ def _save_recording(audio: np.ndarray, sample_rate: int) -> str:
     rec_dir = Path(__file__).parent / "audio" / "recordings"
     rec_dir.mkdir(parents=True, exist_ok=True)
 
-    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-    path = rec_dir / "recording_{}.wav".format(ts)
-    sf.write(str(path), audio, sample_rate, subtype="PCM_16")
-    return str(path)
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+    base = rec_dir / "recording_{}".format(ts)
+    sf.write(str(base) + ".wav", audio, sample_rate, subtype="PCM_16")
+
+    # Always write JSON
+    if decision is not None:
+        meta = decision.to_dict()
+        processed_files = [Path(str(base) + "_processed.wav").name]
+        sf.write(
+            str(base) + "_processed.wav",
+            decision.audio,
+            sample_rate,
+            subtype="PCM_16",
+        )
+        for index, stream in enumerate(decision.separated_audio, start=1):
+            stream_path = str(base) + "_speaker_{}.wav".format(index)
+            sf.write(stream_path, stream, sample_rate, subtype="PCM_16")
+            processed_files.append(Path(stream_path).name)
+        meta["processed_audio_files"] = processed_files
+    else:
+        meta = {
+            "mode": None,
+            "timestamp": __import__("time").time(),
+            "audio_duration_s": round(len(audio) / sample_rate, 3),
+        }
+    meta.update(extra_meta)
+
+    with open(str(base) + ".json", "w") as f:
+        json.dump(meta, f, indent=2)
+
+    # Also write plain transcript for quick inspection
+    transcript = meta.get("wakeword_transcript", "")
+    if transcript:
+        try:
+            with open(str(base) + ".txt", "w", encoding="utf-8") as t:
+                t.write(transcript.strip() + "\n")
+        except Exception:
+            pass
+
+    # Write pkl only when pipeline activated
+    if decision is not None:
+        with open(str(base) + ".pkl", "wb") as f:
+            pickle.dump(decision, f, protocol=pickle.HIGHEST_PROTOCOL)
+
+    return str(base)
 
 
 def _process_and_print(
@@ -154,9 +228,9 @@ def _process_and_print(
 
     duration_s = len(audio) / config.sample_rate
 
-    # Read detection results from the pipeline's internal state
-    vad_result = pipeline.vad.process_audio(audio)
-    ww_result = pipeline.wakeword.process_audio(audio)
+    # Read results stored by the pipeline during process() — do NOT re-run
+    vad_result = pipeline.last_vad_result
+    ww_result = pipeline.last_wakeword_result
 
     ww_detected = decision is not None or ww_result.detected
     ww_conf = ww_result.confidence if ww_result else 0.0
@@ -172,6 +246,7 @@ def _process_and_print(
         wakeword_detected=ww_detected,
         wakeword_conf=ww_conf,
         wakeword_keyword=ww_keyword,
+        ww_transcript=ww_result.transcript if ww_result else "",
         vad_prob=vad_prob,
         audio_duration_s=duration_s,
         pipeline=pipeline,
@@ -182,8 +257,55 @@ def _process_and_print(
     print("  Processing time : {:.1f} ms  (xRT = {:.3f})".format(elapsed * 1000, xrt))
     print()
 
+    # Save pipeline output
+    # Compute RMS and noise floor for logging
+    rms = float((audio**2).mean() ** 0.5)
+    noise_floor_db = (
+        pipeline.noise_estimator.get_noise_floor_db()
+        if pipeline.noise_estimator.has_estimate
+        else (vad_result.noise_floor_db if vad_result else None)
+    )
+
+    stt_confirmed = bool(ww_result and ww_result.transcript.strip())
+    speech_detected = bool((vad_result and vad_result.is_speech) or stt_confirmed)
+    if vad_result and vad_result.is_speech:
+        speech_source = "silero-vad"
+    elif stt_confirmed:
+        speech_source = "stt-override"
+    else:
+        speech_source = "none"
+
+    extra = {
+        "routing": "ACTIVATED" if decision is not None else "DROPPED",
+        "speech_detected": speech_detected,
+        "speech_detection_source": speech_source,
+        "vad_speech_prob": round(vad_prob, 4),
+        "vad_is_speech": vad_result.is_speech if vad_result else False,
+        "wakeword_detected": ww_detected,
+        "wakeword_keyword": ww_keyword,
+        "wakeword_confidence": round(ww_conf, 4),
+        "wakeword_transcript": ww_result.transcript if ww_result else "",
+        "stt_backend": ww_result.stt_backend if ww_result else "",
+        "processing_time_ms": round(elapsed * 1000, 2),
+        "xRT": round(xrt, 4),
+        "rms_energy": round(rms, 6),
+        "noise_floor_db": round(noise_floor_db, 2)
+        if noise_floor_db is not None
+        else None,
+    }
+    base = _save_pipeline_output(decision, audio, config.sample_rate, extra)
+    print(
+        "  Saved : {}.wav  +  .json{}{}".format(
+            base,
+            "  +  .pkl" if decision is not None else "",
+            "  +  processed WAVs" if decision is not None else "",
+        )
+    )
+    print()
+
     # Ensure no cache file is left behind
     from .wakeword.detector import _cache_delete
+
     _cache_delete()
 
 
@@ -248,10 +370,7 @@ def run_from_mic(config: VoiceConfig, duration_s: float = 7.0):
     )
     print()
 
-    # Save the recording as a WAV file
-    saved_path = _save_recording(audio, config.sample_rate)
-
-    _process_and_print(audio, config, pipeline, saved_path=saved_path)
+    _process_and_print(audio, config, pipeline)
 
 
 def run_live(config: VoiceConfig, duration_s: float = 30.0):

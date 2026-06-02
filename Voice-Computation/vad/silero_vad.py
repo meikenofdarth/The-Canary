@@ -8,14 +8,14 @@ HOW IT WORKS:
     It outputs a speech probability between 0.0 and 1.0.
 
     ONNX Model Interface (Silero v5):
-        Inputs:  input  float32[1, 512]
-                 sr     int64[1]          ← shape (1,) NOT scalar!
+        Inputs:  input  float32[1, 576]   (64-sample context + 512-sample frame)
+                 sr     int64 scalar
                  state  float32[2, 1, 128]
         Outputs: output float32[1, 1]
                  stateN float32[2, 1, 128]
 
 FIXES IN THIS VERSION vs ORIGINAL:
-    1. sr input shape fixed to (1,) — original used scalar (), causing ONNX failure
+    1. Carries the 64-sample context required by the current Silero ONNX wrapper
     2. Energy pre-gate: skip inference entirely on silent audio
     3. Spike suppression: require N consecutive above-threshold frames
     4. Probability smoothing: rolling 3-frame average
@@ -46,7 +46,7 @@ class SileroVAD:
     """Silero VAD wrapper with energy gating and spike suppression.
 
     Key fixes vs the original:
-    - sr is np.array([sr], dtype=int64) shape (1,) — ONNX model requires this
+    - Carries 64 samples of context between ONNX inference windows
     - Energy pre-gate prevents ONNX inference on near-silent audio
     - Spike suppression requires vad_consecutive_required frames above threshold
     - Rolling probability buffer smooths single-frame noise spikes
@@ -60,10 +60,11 @@ class SileroVAD:
         self._session = None
         self._is_loaded = False
 
-        # Silero v5 ONNX state: combined h+c, shape (2, 1, 128)
+        # Silero v5 ONNX state: combined h+c, shape (2, 1, 128).
+        # The current wrapper also prepends the previous 64 audio samples.
         self._state = np.zeros((2, 1, 128), dtype=np.float32)
-        # FIX: sr MUST be shape (1,) not scalar ()
-        self._sr = np.array([config.sample_rate], dtype=np.int64)
+        self._context = np.zeros((1, 64), dtype=np.float32)
+        self._sr = np.array(config.sample_rate, dtype=np.int64)
 
         # Spike suppression: rolling buffer of raw probs
         self._prob_buffer: deque = deque(maxlen=3)
@@ -127,16 +128,18 @@ class SileroVAD:
     def _run_inference(self, audio_chunk: np.ndarray) -> float:
         """Run a single 512-sample inference. Returns speech prob [0, 1]."""
         x = audio_chunk.reshape(1, -1).astype(np.float32)
+        x_with_context = np.concatenate((self._context, x), axis=1)
 
         ort_inputs = {
-            "input": x,
-            "sr": self._sr,  # shape (1,) — FIXED
+            "input": x_with_context,
+            "sr": self._sr,
             "state": self._state,  # shape (2, 1, 128)
         }
 
         outputs = self._session.run(None, ort_inputs)
         speech_prob = float(outputs[0].squeeze())  # (1,1) → scalar
         self._state = outputs[1]  # Updated LSTM state (2,1,128)
+        self._context = x_with_context[:, -64:]
 
         return float(np.clip(speech_prob, 0.0, 1.0))
 
@@ -229,36 +232,43 @@ class SileroVAD:
         if len(audio) < window_size:
             return self.process_chunk(audio)
 
-        # Save state — frame scan is non-destructive
+        # Scan a complete utterance from a clean model state, then restore the
+        # streaming state so this method remains non-destructive.
         state_backup = self._state.copy()
+        context_backup = self._context.copy()
+        self._state = np.zeros((2, 1, 128), dtype=np.float32)
+        self._context = np.zeros((1, 64), dtype=np.float32)
 
         probs = []
-        for i in range(0, len(audio) - window_size + 1, window_size):
+
+        for i in range(0, len(audio), window_size):
             chunk = audio[i : i + window_size]
+            if len(chunk) < window_size:
+                chunk = np.pad(chunk, (0, window_size - len(chunk)))
             rms = float(np.sqrt(np.mean(chunk**2) + 1e-12))
             if rms < energy_threshold:
                 probs.append(0.0)
-                self._update_noise_floor(chunk, is_speech=False)
             else:
-                prob = self._run_inference(chunk)
-                probs.append(prob)
-                self._update_noise_floor(chunk, is_speech=(prob >= self.config.vad_threshold))
+                probs.append(self._run_inference(chunk))
 
         self._state = state_backup
+        self._context = context_backup
+        noise_floor_db = self._estimate_noise_floor_db(audio)
+        self._noise_floor_db = noise_floor_db
 
         if not probs:
             return VADResult(
                 is_speech=False,
                 speech_probability=0.0,
-                noise_floor_db=self._noise_floor_db,
+                noise_floor_db=noise_floor_db,
             )
 
         max_prob = float(max(probs))
         speech_frames = sum(1 for p in probs if p >= self.config.vad_threshold)
         speech_fraction = speech_frames / len(probs)
 
-        # Require at least 20% of frames to be speech AND max probability above threshold
-        is_speech = (speech_fraction >= 0.2) and (max_prob >= self.config.vad_threshold)
+        # Require at least 10% of frames to be speech AND max probability above threshold
+        is_speech = (speech_fraction >= 0.10) and (max_prob >= self.config.vad_threshold)
 
         self._update_speech_state(is_speech, len(audio))
 
@@ -267,7 +277,7 @@ class SileroVAD:
             speech_probability=max_prob,
             speech_start_sample=self._speech_start_sample,
             speech_end_sample=self._total_samples_processed,
-            noise_floor_db=self._noise_floor_db,
+            noise_floor_db=noise_floor_db,
         )
 
     def get_frame_probabilities(self, audio: np.ndarray) -> list:
@@ -278,10 +288,15 @@ class SileroVAD:
         window_size = self.config.vad_window_size_samples
         energy_threshold = getattr(self.config, "vad_energy_threshold", 0.001)
         state_backup = self._state.copy()
+        context_backup = self._context.copy()
+        self._state = np.zeros((2, 1, 128), dtype=np.float32)
+        self._context = np.zeros((1, 64), dtype=np.float32)
         probs = []
 
-        for i in range(0, len(audio) - window_size + 1, window_size):
+        for i in range(0, len(audio), window_size):
             chunk = audio[i : i + window_size]
+            if len(chunk) < window_size:
+                chunk = np.pad(chunk, (0, window_size - len(chunk)))
             rms = float(np.sqrt(np.mean(chunk**2) + 1e-12))
             if rms < energy_threshold:
                 probs.append(0.0)
@@ -289,6 +304,7 @@ class SileroVAD:
                 probs.append(self._run_inference(chunk))
 
         self._state = state_backup
+        self._context = context_backup
         return probs
 
     # ── Internal State Machines ───────────────────────────────────────────
@@ -303,6 +319,18 @@ class SileroVAD:
                     + (1 - self._noise_alpha) * self._noise_floor_db
                 )
 
+    def _estimate_noise_floor_db(self, audio: np.ndarray) -> float:
+        """Estimate the dBFS ambient level from the quietest audio frames."""
+        frame_size = self.config.vad_window_size_samples
+        frame_rms = []
+        for i in range(0, len(audio) - frame_size + 1, frame_size):
+            frame = audio[i : i + frame_size]
+            frame_rms.append(float(np.sqrt(np.mean(frame**2) + 1e-12)))
+        if not frame_rms:
+            return self._noise_floor_db
+        quiet_rms = float(np.percentile(frame_rms, 20))
+        return float(np.clip(20.0 * np.log10(max(quiet_rms, 1e-6)), -120.0, 0.0))
+
     def _update_speech_state(self, is_speech: bool, chunk_length: int) -> None:
         sr = self.config.sample_rate
         min_speech = int(self.config.vad_min_speech_ms * sr / 1000)
@@ -313,8 +341,8 @@ class SileroVAD:
                 self._speech_samples += chunk_length
                 if self._speech_samples >= min_speech:
                     self._speech_active = True
-                    self._speech_start_sample = (
-                        self._total_samples_processed - self._speech_samples
+                    self._speech_start_sample = max(
+                        0, self._total_samples_processed - self._speech_samples
                     )
                     self._silence_samples = 0
             else:
@@ -334,6 +362,7 @@ class SileroVAD:
     def reset(self) -> None:
         """Reset all state (call between utterances)."""
         self._state = np.zeros((2, 1, 128), dtype=np.float32)
+        self._context = np.zeros((1, 64), dtype=np.float32)
         self._prob_buffer.clear()
         self._above_threshold_count = 0
         self._speech_active = False
