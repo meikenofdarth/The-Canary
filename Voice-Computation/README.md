@@ -54,9 +54,9 @@ Everything up to the point where audio gets routed to Sanchit's AI models (TIGER
 
 ### 6. Dynamic Resource Scaler (`scaler/resource_scaler.py`)
 - Takes scene analysis output and decides the compute path:
-  - **Mode A** (SCS < 0.3): Clean single speaker → lightweight DSP only, skip separation
-  - **Mode B** (0.3 ≤ SCS < 0.7): Moderate noise → adaptive DSP + speaker verification
-  - **Mode C** (SCS ≥ 0.7): Heavy overlap → full TIGER separation pipeline
+  - **Mode A** (SCS < 0.20): Clean single speaker → lightweight DSP only, skip separation
+  - **Mode B** (0.20 ≤ SCS < 0.45): Moderate noise → adaptive DSP + speaker verification
+  - **Mode C** (SCS ≥ 0.45): Heavy overlap → full TIGER separation pipeline
 - Outputs a `ScalerDecision` with the mode, processed audio, and all metadata
 
 ## How It Works (Flow)

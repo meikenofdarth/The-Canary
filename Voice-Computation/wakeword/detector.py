@@ -29,6 +29,7 @@ BYPASS:
 
 import io
 import logging
+import pickle
 import wave
 from pathlib import Path
 from typing import List, Optional, Tuple
@@ -41,52 +42,41 @@ from ..models import WakeWordResult
 logger = logging.getLogger(__name__)
 
 CALIBRATION_DIR = Path.home() / ".cache" / "canary"
-HIDDEN_FILE_PATH = Path(__file__).parent.parent / ".hidden_recording_data.txt"
+
+# ── Binary pipeline cache ─────────────────────────────────────────────────────
+# Temporary .bin file that holds audio PCM + all pipeline metadata.
+# Created when audio enters the pipeline, deleted after the final decision.
+
+_CACHE_BIN = Path(__file__).parent.parent / ".canary_pipe.bin"
 
 
-def save_hidden_data(data: dict) -> None:
-    """Save key-value pairs to the hidden text file silently."""
+def _cache_write(data: dict) -> None:
+    """Serialize pipeline state to the binary cache (pickle)."""
     try:
-        with open(HIDDEN_FILE_PATH, "w", encoding="utf-8") as f:
-            for k, v in data.items():
-                f.write(f"{k} = {v}\n")
+        with open(_CACHE_BIN, "wb") as f:
+            pickle.dump(data, f, protocol=pickle.HIGHEST_PROTOCOL)
     except Exception:
         pass
 
 
-def load_hidden_data() -> dict:
-    """Load key-value pairs from the hidden text file silently."""
-    data = {}
-    if not HIDDEN_FILE_PATH.exists():
-        return data
+def _cache_read() -> dict:
+    """Deserialize pipeline state from the binary cache."""
+    if not _CACHE_BIN.exists():
+        return {}
     try:
-        with open(HIDDEN_FILE_PATH, "r", encoding="utf-8") as f:
-            for line in f:
-                line = line.strip()
-                if not line or "=" not in line:
-                    continue
-                k, v = line.split("=", 1)
-                k = k.strip()
-                v = v.strip()
-                # Parse to appropriate Python type
-                if v.lower() == "true":
-                    v = True
-                elif v.lower() == "false":
-                    v = False
-                elif v.lower() == "none" or v == "":
-                    v = None
-                else:
-                    try:
-                        if "." in v:
-                            v = float(v)
-                        else:
-                            v = int(v)
-                    except ValueError:
-                        pass
-                data[k] = v
+        with open(_CACHE_BIN, "rb") as f:
+            return pickle.load(f)
+    except Exception:
+        return {}
+
+
+def _cache_delete() -> None:
+    """Remove the binary cache file silently."""
+    try:
+        if _CACHE_BIN.exists():
+            _CACHE_BIN.unlink()
     except Exception:
         pass
-    return data
 
 
 # All keyword variants to search for in transcript
@@ -199,12 +189,12 @@ class WakeWordDetector:
         """Transcribe audio and check for 'canary' in the transcript.
 
         Steps:
-          1. Energy gate — skip if silent
+          1. Compute noise metrics (RMS)
           2. Transcribe via Google STT → Whisper → acoustic fallback
-          3. Save transcript and noise metrics to hidden text file
-          4. Read from hidden text file (redirection)
+          3. Store audio PCM + transcript + metrics in binary cache
+          4. Read transcript back from the binary cache
           5. Search transcript for keyword variants
-          6. Debounce
+          6. Debounce & update cache with detection result
 
         Args:
             audio: float32 mono @ 16 kHz, any length.
@@ -217,30 +207,34 @@ class WakeWordDetector:
                 detected=True, confidence=1.0, keyword="bypass", transcript="bypass"
             )
 
-        # ── Energy gate / Noise measurement ──────────────────────────────
+        # ── Noise measurement ────────────────────────────────────────────
         rms = float(np.sqrt(np.mean(audio**2) + 1e-12))
 
-        # ── Transcribe ─────────────────────────────────────────────────────
+        # ── Transcribe ───────────────────────────────────────────────────
         transcript, method = self._transcribe(audio)
         transcript_lower = transcript.lower().strip()
 
         logger.debug("STT [%s]: '%s'", method, transcript_lower)
 
-        # Write transcription, noise levels and other data to hidden text file
-        existing_data = load_hidden_data()
-        existing_data.update({
+        # ── Write to binary cache ────────────────────────────────────────
+        cache = _cache_read()
+        cache.update({
+            "audio_pcm": audio.tobytes(),
+            "audio_dtype": str(audio.dtype),
+            "audio_len": len(audio),
             "transcript": transcript_lower,
+            "stt_method": method,
             "rms": rms,
             "sample_rate": self.config.sample_rate,
             "duration_seconds": len(audio) / self.config.sample_rate,
         })
-        save_hidden_data(existing_data)
+        _cache_write(cache)
 
-        # ── Redirect Check: Read back from the hidden text file ───────────
-        parsed_data = load_hidden_data()
-        parsed_transcript = parsed_data.get("transcript", transcript_lower)
+        # ── Read back from cache (redirect) ──────────────────────────────
+        cache = _cache_read()
+        parsed_transcript = cache.get("transcript", transcript_lower)
 
-        # ── Keyword search using redirected transcript ─────────────────────
+        # ── Keyword search ───────────────────────────────────────────────
         detected_kw, confidence = self._search_keywords(parsed_transcript)
         detected = confidence >= getattr(self.config, "wakeword_threshold", 0.5)
 
@@ -253,11 +247,11 @@ class WakeWordDetector:
             detected and self._consecutive_count >= self._consecutive_hits_needed
         )
 
-        # Store updated wake word detection decisions in the hidden text file
-        parsed_data["wakeword_detected"] = final_detected
-        parsed_data["wakeword_confidence"] = confidence
-        parsed_data["keyword"] = detected_kw
-        save_hidden_data(parsed_data)
+        # ── Update cache with detection result ───────────────────────────
+        cache["wakeword_detected"] = final_detected
+        cache["wakeword_confidence"] = confidence
+        cache["keyword"] = detected_kw
+        _cache_write(cache)
 
         if final_detected:
             logger.info(

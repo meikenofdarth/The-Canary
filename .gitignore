@@ -38,3 +38,7 @@ dump.rdb
 
 # Logs
 *.log
+
+# Pipeline cache (temporary, auto-deleted)
+.canary_pipe.bin
+.hidden_recording_data.txt

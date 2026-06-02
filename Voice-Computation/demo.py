@@ -58,14 +58,6 @@ def print_result(
     print("  DETECTION RESULT")
     print(_SEP)
 
-    # --- Transcript (most important line now) ---
-    if ww_transcript and ww_transcript not in ("bypass", "(bypass — not transcribed)"):
-        print(_line("Transcript", '"{}"'.format(ww_transcript)))
-    elif ww_transcript == "(bypass — not transcribed)":
-        print(_line("Transcript", "(bypass mode)"))
-    else:
-        print(_line("Transcript", "(no speech / not transcribed)"))
-
     # --- Wake-word ---
     if wakeword_detected:
         ww_status = "YES  —  keyword: '{}'  (conf={:.3f})".format(
@@ -75,8 +67,6 @@ def print_result(
         ww_status = "NO"
     print(_line("Speech detected", "YES  (prob={:.3f})".format(vad_prob)))
     print(_line("Wake word detected", ww_status))
-    if saved_path:
-        print(_line("Recording saved", saved_path))
     print()
 
     # --- Mode routing ---
@@ -106,7 +96,10 @@ def print_result(
         print(_line("VAD confidence", "{:.3f}".format(decision.vad_confidence)))
         print(_line("Wake-word conf", "{:.3f}".format(decision.wakeword_confidence)))
         print(_line("Scene complexity", "{:.3f}  {}".format(scs, scs_bar)))
-        print(_line("  -> thresholds", "A < 0.30  |  0.30 <= B < 0.70  |  C >= 0.70"))
+        cfg = pipeline.config if pipeline else VoiceConfig()
+        print(_line("  -> thresholds", "A < {:.2f}  |  {:.2f} <= B < {:.2f}  |  C >= {:.2f}".format(
+            cfg.scs_threshold_a, cfg.scs_threshold_a, cfg.scs_threshold_b, cfg.scs_threshold_b
+        )))
         print(_line("Speaker count", str(decision.estimated_speaker_count)))
         print(_line("Overlap prob", "{:.3f}".format(decision.overlap_probability)))
         print(_line("Noise floor", "{:.1f} dB".format(decision.noise_floor_db)))
@@ -161,28 +154,24 @@ def _process_and_print(
 
     duration_s = len(audio) / config.sample_rate
 
-    # Re-run wakeword on the full audio to get the transcript
-    # (pipeline.process already ran it internally; re-run here for display)
+    # Read detection results from the pipeline's internal state
     vad_result = pipeline.vad.process_audio(audio)
     ww_result = pipeline.wakeword.process_audio(audio)
 
     ww_detected = decision is not None or ww_result.detected
     ww_conf = ww_result.confidence if ww_result else 0.0
     ww_keyword = ww_result.keyword if ww_result else ""
-    ww_transcript = getattr(ww_result, "transcript", "")
     vad_prob = vad_result.speech_probability if vad_result else 0.0
 
     if ww_keyword == "bypass":
         ww_keyword = "(bypass mode)"
         ww_detected = vad_result.is_speech
-        ww_transcript = "(bypass — not transcribed)"
 
     print_result(
         decision=decision,
         wakeword_detected=ww_detected,
         wakeword_conf=ww_conf,
         wakeword_keyword=ww_keyword,
-        ww_transcript=ww_transcript,
         vad_prob=vad_prob,
         audio_duration_s=duration_s,
         pipeline=pipeline,
@@ -192,6 +181,10 @@ def _process_and_print(
     xrt = elapsed / duration_s if duration_s > 0 else 0
     print("  Processing time : {:.1f} ms  (xRT = {:.3f})".format(elapsed * 1000, xrt))
     print()
+
+    # Ensure no cache file is left behind
+    from .wakeword.detector import _cache_delete
+    _cache_delete()
 
 
 def run_from_file(filepath: str, config: VoiceConfig):
@@ -220,6 +213,9 @@ def run_from_file(filepath: str, config: VoiceConfig):
 
 def run_from_mic(config: VoiceConfig, duration_s: float = 7.0):
     from .audio.capture import AudioCapture
+
+    # Single recording = single shot — don't require 2 consecutive hits
+    config.wakeword_consecutive_hits = 1
 
     print("Loading pipeline (VAD model downloads on first run)...")
     pipeline = VoiceComputationPipeline(config)

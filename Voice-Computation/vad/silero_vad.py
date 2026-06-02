@@ -238,9 +238,11 @@ class SileroVAD:
             rms = float(np.sqrt(np.mean(chunk**2) + 1e-12))
             if rms < energy_threshold:
                 probs.append(0.0)
+                self._update_noise_floor(chunk, is_speech=False)
             else:
                 prob = self._run_inference(chunk)
                 probs.append(prob)
+                self._update_noise_floor(chunk, is_speech=(prob >= self.config.vad_threshold))
 
         self._state = state_backup
 
@@ -258,7 +260,6 @@ class SileroVAD:
         # Require at least 20% of frames to be speech AND max probability above threshold
         is_speech = (speech_fraction >= 0.2) and (max_prob >= self.config.vad_threshold)
 
-        self._update_noise_floor(audio, is_speech)
         self._update_speech_state(is_speech, len(audio))
 
         return VADResult(

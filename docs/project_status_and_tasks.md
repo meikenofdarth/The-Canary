@@ -58,9 +58,9 @@ Mic → [Stage 0] → [Stage 1] → [Stage 2] → [Stage 3] → [Stage 4] → Re
   - Compute from: energy variance, spectral flux, zero-crossing rate, overlap estimate
   - Output: float 0.0 → 1.0
 - [ ] Implement **SCS Router**:
-  - SCS < 0.3 → **Mode A** (clean single speaker, skip separation)
-  - SCS 0.3-0.6 → **Mode B** (noisy single speaker, light denoising)
-  - SCS > 0.6 → **Mode C** (overlapping speakers, full TIGER separation)
+  - SCS < 0.20 → **Mode A** (clean single speaker, skip separation)
+  - SCS 0.20-0.45 → **Mode B** (noisy single speaker, light denoising)
+  - SCS > 0.45 → **Mode C** (overlapping speakers, full TIGER separation)
 - [ ] **Files**: `src/stage1/ddsd.py`, `src/stage1/scs.py`, `src/stage1/router.py`
 
 ### Stage 2: Speaker Separation + Biometrics

@@ -15,9 +15,9 @@ HOW IT WORKS:
         - w1, w2, w3: Configurable weights (default 0.4, 0.35, 0.25)
     
     Mode Routing:
-        SCS < 0.3  → MODE A (clean, single speaker → skip separation)
-        0.3 ≤ SCS < 0.7 → MODE B (moderate → adaptive DSP)
-        SCS ≥ 0.7 → MODE C (heavy overlap → full TIGER separation)
+        SCS < 0.20  → MODE A (clean, single speaker → skip separation)
+        0.20 ≤ SCS < 0.45 → MODE B (moderate → adaptive DSP)
+        SCS ≥ 0.45 → MODE C (heavy overlap → full TIGER separation)
     
     Speaker Count Estimation:
         Uses energy variance analysis. Multiple speakers cause rapid
@@ -66,18 +66,18 @@ class SceneAnalyzer:
         Returns:
             SceneAnalysis with complexity score and routing decision.
         """
-        # Redirect inputs from the text file!
-        from ..wakeword.detector import load_hidden_data, save_hidden_data
-        parsed_data = load_hidden_data()
-        if parsed_data:
-            if "speech_probability" in parsed_data:
-                vad_confidence = parsed_data["speech_probability"]
-            elif "vad_confidence" in parsed_data:
-                vad_confidence = parsed_data["vad_confidence"]
-            if "wakeword_confidence" in parsed_data:
-                wakeword_confidence = parsed_data["wakeword_confidence"]
-            if "noise_floor_db" in parsed_data:
-                noise_floor_db = parsed_data["noise_floor_db"]
+        # Redirect inputs from binary pipeline cache
+        from ..wakeword.detector import _cache_read, _cache_write
+        cached = _cache_read()
+        if cached:
+            if "speech_probability" in cached:
+                vad_confidence = cached["speech_probability"]
+            elif "vad_confidence" in cached:
+                vad_confidence = cached["vad_confidence"]
+            if "wakeword_confidence" in cached:
+                wakeword_confidence = cached["wakeword_confidence"]
+            if "noise_floor_db" in cached:
+                noise_floor_db = cached["noise_floor_db"]
 
         # 1. Estimate speaker count
         speaker_count = self._estimate_speaker_count(features)
@@ -108,9 +108,9 @@ class SceneAnalyzer:
             noise_normalized, is_directed
         )
 
-        # Update hidden file with analysis results
-        parsed_data = load_hidden_data()
-        parsed_data.update({
+        # Update binary cache with analysis results
+        cached = _cache_read()
+        cached.update({
             "speaker_count": speaker_count,
             "overlap_probability": overlap_prob,
             "noise_level_normalized": noise_normalized,
@@ -118,7 +118,7 @@ class SceneAnalyzer:
             "scs": scs,
             "mode": mode.value if hasattr(mode, "value") else str(mode)
         })
-        save_hidden_data(parsed_data)
+        _cache_write(cached)
         
         return SceneAnalysis(
             scene_complexity_score=scs,
@@ -289,9 +289,9 @@ class SceneAnalyzer:
     def _determine_mode(self, scs: float) -> PipelineMode:
         """Map SCS to processing mode.
         
-        Mode A (< 0.3): Clean, single speaker → minimal processing
-        Mode B (0.3-0.7): Moderate complexity → adaptive DSP
-        Mode C (≥ 0.7): Heavy overlap/noise → full separation
+        Mode A (< 0.20): Clean, single speaker → minimal processing
+        Mode B (0.20-0.45): Moderate complexity → adaptive DSP
+        Mode C (≥ 0.45): Heavy overlap/noise → full separation
         """
         if scs < self.config.scs_threshold_a:
             return PipelineMode.MODE_A

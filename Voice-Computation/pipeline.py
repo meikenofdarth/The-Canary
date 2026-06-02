@@ -94,15 +94,15 @@ class VoiceComputationPipeline:
         # ── Stage 0: VAD Gate ──────────────────────────────────────
         vad_result = self.vad.process_audio(audio)
 
-        # Store VAD results to hidden text file first
-        from .wakeword.detector import load_hidden_data, save_hidden_data
-        existing_data = load_hidden_data()
-        existing_data.update({
+        # Store VAD results to binary pipeline cache
+        from .wakeword.detector import _cache_read, _cache_write, _cache_delete
+        cache = _cache_read()
+        cache.update({
             "speech_probability": vad_result.speech_probability,
             "vad_confidence": vad_result.speech_probability,
             "noise_floor_db": vad_result.noise_floor_db,
         })
-        save_hidden_data(existing_data)
+        _cache_write(cache)
 
         # ── Stage 0: Wake-Word Gate ────────────────────────────────
         wakeword_result = self.wakeword.process_audio(audio)
@@ -117,6 +117,7 @@ class VoiceComputationPipeline:
                 logger.debug(
                     "VAD: No speech detected (prob=%.3f)", vad_result.speech_probability
                 )
+                _cache_delete()
                 return None
 
             # Speech but no wake-word → ambient conversation
@@ -124,6 +125,7 @@ class VoiceComputationPipeline:
             logger.debug(
                 "Wake-word not detected (conf=%.3f)", wakeword_result.confidence
             )
+            _cache_delete()
             return None
 
         if wakeword_result.detected:
@@ -138,6 +140,7 @@ class VoiceComputationPipeline:
         # ── Pre-Processing ─────────────────────────────────────────
         # Normalize audio
         preprocessed = self.normalizer.process(audio)
+        preprocessed.noise_floor_db = vad_result.noise_floor_db
 
         # Apply noise subtraction if we have a noise estimate
         if self.noise_estimator.has_estimate:
@@ -175,6 +178,9 @@ class VoiceComputationPipeline:
             xrt,
             decision.mode.value,
         )
+
+        # Final decision produced — delete the temporary binary cache
+        _cache_delete()
 
         return decision
 

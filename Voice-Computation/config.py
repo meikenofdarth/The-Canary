@@ -73,8 +73,8 @@ class VoiceConfig:
     scs_weight_wakeword: float = 0.25  # Weight for (1 - wakeword_certainty)
 
     # SCS thresholds for mode routing
-    scs_threshold_a: float = 0.3  # Below this → Mode A
-    scs_threshold_b: float = 0.7  # Below this → Mode B, above → Mode C
+    scs_threshold_a: float = 0.20  # Below this → Mode A
+    scs_threshold_b: float = 0.45  # Below this → Mode B, above → Mode C
 
     # ── Dynamic Resource Scaler ────────────────────────────────────
     min_confidence_threshold: float = 0.5  # Drop audio below this confidence
