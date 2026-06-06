@@ -1,0 +1,50 @@
+{
+  "mode": "C",
+  "timestamp": 1780425629.783597,
+  "vad_confidence": 0.9961,
+  "wakeword_confidence": 0.9,
+  "scene_complexity_score": 0.6175,
+  "estimated_speaker_count": 2,
+  "overlap_probability": 0.8313,
+  "noise_floor_db": -54.87,
+  "snr_estimate_db": 23.39,
+  "is_directed_speech": true,
+  "audio_duration_s": 6.99,
+  "separation_method": "pitch-guided-soft-mask",
+  "separated_stream_count": 2,
+  "speaker_profiles": [
+    {
+      "profile_id": 1,
+      "pitch_hz": 162.7,
+      "pitch_std_hz": 66.1,
+      "mean_intensity_dbfs": -33.8,
+      "frame_count": 305,
+      "support_ratio": 0.44
+    },
+    {
+      "profile_id": 2,
+      "pitch_hz": 307.4,
+      "pitch_std_hz": 102.8,
+      "mean_intensity_dbfs": -35.7,
+      "frame_count": 313,
+      "support_ratio": 0.452
+    }
+  ],
+  "processed_audio_files": [
+    "recording_20260603_001029_786645_processed.wav",
+    "recording_20260603_001029_786645_speaker_1.wav",
+    "recording_20260603_001029_786645_speaker_2.wav"
+  ],
+  "routing": "ACTIVATED",
+  "speech_detected": true,
+  "speech_detection_source": "silero-vad",
+  "vad_speech_prob": 0.9961,
+  "vad_is_speech": true,
+  "wakeword_detected": true,
+  "wakeword_keyword": "canary",
+  "wakeword_transcript": "canary pro what are you doing bro",
+  "stt_backend": "google",
+  "processing_time_ms": 1933.2,
+  "xRT": 0.2766,
+  "rms_energy": 0.008542
+}

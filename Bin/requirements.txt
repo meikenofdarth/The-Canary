@@ -1,0 +1,22 @@
+# Voice-Computation Dependencies
+# Install: pip install -r requirements.txt
+
+# Audio I/O
+sounddevice>=0.5.0          # Mic capture (PortAudio bindings)
+numpy>=2.0.0                # Array operations
+soundfile>=0.13.0           # WAV file I/O
+scipy>=1.14.0               # Signal processing (filters, spectral analysis)
+
+# VAD (ONNX-only, no torch/torchaudio needed)
+onnxruntime>=1.21.0         # Silero VAD + general ONNX inference
+
+# Wake-word / STT
+SpeechRecognition>=3.10.0   # Google STT + Whisper offline fallback
+openai-whisper>=20231117    # Offline STT fallback (tiny model ~39MB)
+pydub>=0.25.0               # MP3/M4A/OGG audio format conversion
+
+# Utilities
+librosa>=0.10.0             # Mel-spectrograms, audio features
+
+# Visualization
+matplotlib>=3.10.0          # Waveform, spectrogram, analysis plots

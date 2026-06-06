@@ -163,7 +163,12 @@ class VoiceComputationPipeline:
         # ── Activation Logic ───────────────────────────────────────
         gate_passed = False
 
-        if wakeword_result.detected:
+        if bypass_mode:
+            gate_passed = True
+            self._is_activated = True
+            self._total_activations += 1
+            logger.info("ACTIVATED by wake-word bypass mode")
+        elif wakeword_result.detected:
             rms = float(np.sqrt(np.mean(mono_audio**2) + 1e-12))
             conf_ok = wakeword_result.confidence >= getattr(
                 self.config, "wakeword_threshold", 0.5
@@ -241,7 +246,11 @@ class VoiceComputationPipeline:
         if is_stereo:
             separation = self.spectral_separator.process(audio)
         else:
-            separation = self.spectral_separator.process(preprocessed_mono.audio, overlap_probability=overlap_prob)
+            separation = self.spectral_separator.process(
+                preprocessed_mono.audio,
+                overlap_probability=overlap_prob,
+                noise_floor_db=preprocessed_mono.noise_floor_db,
+            )
 
         # ── Post-Separation Speaker Analysis & Diarization ─────────
         if separation.speaker_streams:

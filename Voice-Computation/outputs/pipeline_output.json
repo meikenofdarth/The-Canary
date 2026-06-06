@@ -1,0 +1,23 @@
+{
+  "mode": "B",
+  "timestamp": 98521.699416,
+  "scene_complexity_score": 0.3643,
+  "vad_confidence": 1.0,
+  "wakeword_confidence": 1.0,
+  "overlap_probability": 0.3324,
+  "noise_floor_db": -55.36,
+  "speaker_count_estimate": 2,
+  "transcript": "Hey, canary, how are you? How was your day today? I'm very tired. I don't know what to do.",
+  "audio_streams": [
+    {
+      "stream_id": 0,
+      "sample_rate": 16000,
+      "speaker_id": "unknown",
+      "speaker_confidence": 0.0,
+      "duration_seconds": 0.096,
+      "num_samples": 1536,
+      "audio_rms": 0.002278,
+      "audio_peak": 0.006277
+    }
+  ]
+}

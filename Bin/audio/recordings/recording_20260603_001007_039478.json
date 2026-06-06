@@ -1,0 +1,50 @@
+{
+  "mode": "C",
+  "timestamp": 1780425607.039117,
+  "vad_confidence": 0.9993,
+  "wakeword_confidence": 1.0,
+  "scene_complexity_score": 0.7175,
+  "estimated_speaker_count": 2,
+  "overlap_probability": 0.9817,
+  "noise_floor_db": -53.93,
+  "snr_estimate_db": 30.39,
+  "is_directed_speech": true,
+  "audio_duration_s": 6.99,
+  "separation_method": "pitch-guided-soft-mask",
+  "separated_stream_count": 2,
+  "speaker_profiles": [
+    {
+      "profile_id": 1,
+      "pitch_hz": 187.3,
+      "pitch_std_hz": 76.2,
+      "mean_intensity_dbfs": -30.8,
+      "frame_count": 320,
+      "support_ratio": 0.462
+    },
+    {
+      "profile_id": 2,
+      "pitch_hz": 320.2,
+      "pitch_std_hz": 91.7,
+      "mean_intensity_dbfs": -31.6,
+      "frame_count": 325,
+      "support_ratio": 0.469
+    }
+  ],
+  "processed_audio_files": [
+    "recording_20260603_001007_039478_processed.wav",
+    "recording_20260603_001007_039478_speaker_1.wav",
+    "recording_20260603_001007_039478_speaker_2.wav"
+  ],
+  "routing": "ACTIVATED",
+  "speech_detected": true,
+  "speech_detection_source": "silero-vad",
+  "vad_speech_prob": 0.9993,
+  "vad_is_speech": true,
+  "wakeword_detected": true,
+  "wakeword_keyword": "hey canary",
+  "wakeword_transcript": "hey canary i am very tired man",
+  "stt_backend": "google",
+  "processing_time_ms": 1143.12,
+  "xRT": 0.1635,
+  "rms_energy": 0.013368
+}

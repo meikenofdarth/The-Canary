@@ -30,7 +30,10 @@ class SpectralSpeakerSeparator:
         self._hop = 256
 
     def process(
-        self, audio: np.ndarray, overlap_probability: float = 0.0
+        self,
+        audio: np.ndarray,
+        overlap_probability: float = 0.0,
+        noise_floor_db: float = -60.0,
     ) -> SeparationResult:
         """Separate the input audio signal into source streams before identity checks."""
         is_stereo = audio.ndim > 1 and audio.shape[1] == 2
@@ -124,12 +127,22 @@ class SpectralSpeakerSeparator:
         n_frames = magnitude.shape[1]
         frame_pitches = []
 
+        # Convert noise floor from dBFS to linear RMS (assume 0 dBFS corresponds to amplitude 1.0)
+        noise_rms = 10.0 ** (noise_floor_db / 20.0)
+        rms_threshold = max(2.5 * noise_rms, self.config.speaker_frame_rms_threshold)
+
         for t_idx in range(n_frames):
-            frame_mag = magnitude[:, t_idx]
-            mag_sum = np.sum(frame_mag)
-            if mag_sum < 1e-6:
+            # Check frame RMS energy to avoid detecting pitch in quiet/silent frames
+            start_sample = t_idx * self._hop
+            end_sample = start_sample + self._n_fft
+            frame_samples = audio[start_sample:end_sample]
+            rms = float(np.sqrt(np.mean(frame_samples**2) + 1e-12)) if len(frame_samples) > 0 else 0.0
+
+            if rms < rms_threshold:
                 frame_pitches.append([])
                 continue
+
+            frame_mag = filtered_magnitude[:, t_idx]
 
             # Compute Harmonic Sum Spectrum (HSS) to find candidate pitches
             scores = np.zeros(len(pitch_grid))
@@ -144,22 +157,22 @@ class SpectralSpeakerSeparator:
                 for idx in np.argsort(scores)[::-1]:
                     score = scores[idx]
                     pitch = pitch_grid[idx]
-                    if score < 0.3 * max_score:
+                    if score < 0.55 * max_score:
                         break
                     
                     # Enforce minimum distance between pitch peaks
-                    if any(abs(pitch - existing) < 25.0 for existing in peak_pitches):
+                    if any(abs(pitch - existing) < 35.0 for existing in peak_pitches):
                         continue
 
-                    # Harmonic/overtone rejection
+                    # Harmonic/overtone/subharmonic rejection with wider tolerance for grid/STFT resolution
                     is_harmonic = False
                     for existing in peak_pitches:
                         ratio = pitch / existing
-                        if any(abs(ratio - k) < 0.08 for k in [2.0, 3.0, 4.0]):
+                        if any(abs(ratio - k) < 0.15 for k in [1.33, 1.5, 2.0, 2.5, 3.0, 4.0]):
                             is_harmonic = True
                             break
                         ratio_sub = existing / pitch
-                        if any(abs(ratio_sub - k) < 0.08 for k in [2.0, 3.0, 4.0]):
+                        if any(abs(ratio_sub - k) < 0.15 for k in [1.33, 1.5, 2.0, 2.5, 3.0, 4.0]):
                             is_harmonic = True
                             break
                     
@@ -168,6 +181,15 @@ class SpectralSpeakerSeparator:
                         if len(peak_pitches) == 2:
                             break
             frame_pitches.append(peak_pitches)
+
+        # Count active and multi-pitch frames to estimate overlap ratio
+        active_frames = sum(1 for candidates in frame_pitches if len(candidates) >= 1)
+        multi_pitch_frames = sum(1 for candidates in frame_pitches if len(candidates) >= 2)
+        multi_ratio = multi_pitch_frames / max(active_frames, 1)
+
+        # Skip separation and speaker clustering if overlap evidence is weak
+        if multi_ratio < 0.15:
+            return SeparationResult(processed_audio=processed, method="none")
 
         # Cluster frame pitch candidates to identify speaker pitch centers
         all_pitches = [p for frame in frame_pitches for p in frame]
