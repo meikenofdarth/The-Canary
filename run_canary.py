@@ -212,31 +212,36 @@ def _light_denoise_for_sep(audio, sr):
     return sig.astype(np.float32)
 
 
-def _run_sepformer(audio, sr):
-    """Run SepFormer-libri2mix, always returns exactly 2 streams."""
+def _run_sepformer(audio, sr, n_mix: int = 2):
+    """
+    Run SepFormer-libri{n_mix}mix.
+    n_mix=2  → speechbrain/sepformer-libri2mix  (2 output streams)
+    n_mix=3  → speechbrain/sepformer-libri3mix  (3 output streams)
+    """
     import torch, torchaudio, logging
     logging.getLogger("speechbrain").setLevel(logging.ERROR)
 
-    MODEL_SR = 8000
-    audio_8k = torchaudio.functional.resample(
+    model_id = f"sepformer-libri{n_mix}mix"
+    MODEL_SR  = 8000
+    audio_8k  = torchaudio.functional.resample(
         torch.from_numpy(audio).unsqueeze(0), sr, MODEL_SR)
 
     from speechbrain.inference.separation import SepformerSeparation
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         model = SepformerSeparation.from_hparams(
-            source="speechbrain/sepformer-libri2mix",
-            savedir=f"{MODEL_CACHE}/sepformer-libri2mix",
+            source=f"speechbrain/{model_id}",
+            savedir=f"{MODEL_CACHE}/{model_id}",
             run_opts={"device": "cpu"},
         )
 
     with torch.no_grad():
-        est = model.separate_batch(audio_8k)   # (1, T_8k, 2)
+        est = model.separate_batch(audio_8k)   # (1, T_8k, n_mix)
 
     streams = []
-    for i in range(2):
+    for i in range(n_mix):
         s8 = est[0, :, i].cpu().numpy()
-        s = torchaudio.functional.resample(
+        s  = torchaudio.functional.resample(
             torch.from_numpy(s8).unsqueeze(0), MODEL_SR, sr
         ).squeeze(0).numpy()
         if len(s) > len(audio):   s = s[:len(audio)]
@@ -253,30 +258,15 @@ def _speech_band_rms(audio, sr, lo=300, hi=3400):
 
 def detect_and_separate(raw, sr):
     """
-    Run SepFormer on a lightly denoised mix.
+    2-speaker auto-detection using SepFormer-libri2mix.
+    Calibrated on 10 real recordings — default path, unchanged.
+
     Returns (n_speakers, streams_list).
-    If n_speakers==1, streams_list is empty (caller uses raw directly).
-    If n_speakers==2, streams_list has 2 separated numpy arrays.
-
-    Decision logic (calibrated on 10 real recordings):
-
-    Cross-correlation between SepFormer's 2 outputs:
-
-      |corr| < 0.03  → near-zero = genuinely independent sources = 2 speakers
-                       (all 4 confirmed 2-speaker sessions scored here)
-
-      |corr| > 0.80  → identical / anti-phase split = definitely 1 speaker
-
-      0.03 ≤ |corr| ≤ 0.80 → ambiguous; use speech-band energy ratio:
-           ratio ≥ 0.35 → 2 speakers
-           ratio <  0.35 → 1 speaker (ghost stream)
-
-    Real data summary:
-      2-spk recordings: |corr| = 0.007, 0.023, 0.009, 0.007  (all < 0.03)
-      1-spk recordings: |corr| = 0.142, 0.113, 0.044, 0.034, 0.151, 0.234
+      n_speakers==1 → streams_list is empty (caller uses raw directly)
+      n_speakers==2 → streams_list has 2 separated numpy arrays
     """
-    mix = _light_denoise_for_sep(raw, sr)
-    streams = _run_sepformer(mix, sr)
+    mix     = _light_denoise_for_sep(raw, sr)
+    streams = _run_sepformer(mix, sr, n_mix=2)
 
     corr  = float(np.corrcoef(streams[0], streams[1])[0, 1])
     sb    = [_speech_band_rms(s, sr) for s in streams]
@@ -287,6 +277,39 @@ def detect_and_separate(raw, sr):
     if abs(corr) > 0.80:   # same source
         return 1, []
     return (2, streams) if ratio >= 0.35 else (1, [])
+
+
+def detect_and_separate_3spk(raw, sr):
+    """
+    3-speaker mode using SepFormer-libri3mix.
+    Downloads speechbrain/sepformer-libri3mix on first use (~same size as libri2mix).
+
+    SepFormer-libri3mix always produces 3 output streams.
+    Real speaker streams are identified by speech-band RMS:
+      - Reference = loudest stream's speech-band RMS
+      - Any stream with RMS ≥ 25% of reference → real speaker
+      - Any stream with RMS <  25% of reference → ghost/artifact → discarded
+
+    Returns (n_real_speakers, real_streams).
+    n_real_speakers is always ≥ 1.
+    """
+    print("  (using sepformer-libri3mix)")
+    mix     = _light_denoise_for_sep(raw, sr)
+    streams = _run_sepformer(mix, sr, n_mix=3)
+
+    sb      = [_speech_band_rms(s, sr) for s in streams]
+    max_sb  = max(sb) + 1e-10
+
+    # Keep any stream whose speech-band RMS is ≥ 25% of the loudest stream
+    real = [(s, r) for s, r in zip(streams, sb) if r / max_sb >= 0.25]
+
+    if not real:
+        # Fallback: just keep the loudest
+        best = int(np.argmax(sb))
+        real = [(streams[best], sb[best])]
+
+    real_streams = [s for s, _ in real]
+    return len(real_streams), real_streams
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -334,7 +357,8 @@ def enhance_stream(stream, sr):
 # ─────────────────────────────────────────────────────────────────────────────
 #  MAIN
 # ─────────────────────────────────────────────────────────────────────────────
-def main():
+def main(max_speakers: int = 2):
+    """max_speakers=2 → libri2mix (default); max_speakers=3 → libri3mix."""
     OUTPUT_ROOT = Path("outputs")
     OUTPUT_ROOT.mkdir(exist_ok=True)
 
@@ -355,7 +379,10 @@ def main():
 
     # Detect speaker count (runs SepFormer internally)
     print("● Detecting speakers ...")
-    n_spk, streams = detect_and_separate(raw, sr)
+    if max_speakers == 3:
+        n_spk, streams = detect_and_separate_3spk(raw, sr)
+    else:
+        n_spk, streams = detect_and_separate(raw, sr)
 
     if n_spk == 1:
         # ── Single speaker: direct enhancement ───────────────────────────
@@ -418,4 +445,13 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    import argparse
+    parser = argparse.ArgumentParser(
+        description="The Canary — Real-Time Multi-Speaker Separation"
+    )
+    parser.add_argument(
+        "--speakers", type=int, default=2, choices=[2, 3],
+        help="Max speakers to separate: 2 (default, libri2mix) or 3 (libri3mix)",
+    )
+    args = parser.parse_args()
+    main(max_speakers=args.speakers)
