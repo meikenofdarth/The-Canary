@@ -256,29 +256,37 @@ def detect_and_separate(raw, sr):
     Run SepFormer on a lightly denoised mix.
     Returns (n_speakers, streams_list).
     If n_speakers==1, streams_list is empty (caller uses raw directly).
-    If n_speakers==2, streams_list contains 2 separated numpy arrays.
+    If n_speakers==2, streams_list has 2 separated numpy arrays.
 
-    Decision rule (calibrated on SepFormer-libri2mix):
-      speech-band RMS ratio weaker/stronger:
-        1 speaker → 0.16–0.22  (ghost stream)
-        2 speakers → 0.55+     (real second voice)
-      Threshold: 0.42
+    Decision logic (calibrated on 10 real recordings):
+
+    Cross-correlation between SepFormer's 2 outputs:
+
+      |corr| < 0.03  → near-zero = genuinely independent sources = 2 speakers
+                       (all 4 confirmed 2-speaker sessions scored here)
+
+      |corr| > 0.80  → identical / anti-phase split = definitely 1 speaker
+
+      0.03 ≤ |corr| ≤ 0.80 → ambiguous; use speech-band energy ratio:
+           ratio ≥ 0.35 → 2 speakers
+           ratio <  0.35 → 1 speaker (ghost stream)
+
+    Real data summary:
+      2-spk recordings: |corr| = 0.007, 0.023, 0.009, 0.007  (all < 0.03)
+      1-spk recordings: |corr| = 0.142, 0.113, 0.044, 0.034, 0.151, 0.234
     """
     mix = _light_denoise_for_sep(raw, sr)
     streams = _run_sepformer(mix, sr)
 
-    # Cross-correlation guard
-    corr = float(np.corrcoef(streams[0], streams[1])[0, 1])
-    if abs(corr) > 0.80:
-        return 1, []
-
-    # Speech-band ratio
-    sb = [_speech_band_rms(s, sr) for s in streams]
+    corr  = float(np.corrcoef(streams[0], streams[1])[0, 1])
+    sb    = [_speech_band_rms(s, sr) for s in streams]
     ratio = min(sb) / (max(sb) + 1e-10)
-    if ratio < 0.42:
-        return 1, []
 
-    return 2, streams
+    if abs(corr) < 0.03:   # clearly 2 independent sources
+        return 2, streams
+    if abs(corr) > 0.80:   # same source
+        return 1, []
+    return (2, streams) if ratio >= 0.35 else (1, [])
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -327,8 +335,11 @@ def enhance_stream(stream, sr):
 #  MAIN
 # ─────────────────────────────────────────────────────────────────────────────
 def main():
+    OUTPUT_ROOT = Path("outputs")
+    OUTPUT_ROOT.mkdir(exist_ok=True)
+
     ts      = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    out_dir = Path(ts)
+    out_dir = OUTPUT_ROOT / ts
     out_dir.mkdir(exist_ok=True)
 
     # Record
@@ -363,13 +374,30 @@ def main():
             sf.write(out_dir / fname, enhanced, sr, subtype="PCM_16")
             saved.append(fname)
 
-    # Report
+    # ── ASR: transcribe each speaker wav → .txt ─────────────────────────────
+    print("\n● Transcribing with Whisper large-v3 ...")
+    from asr.transcribe import transcribe_and_save
+    transcripts = {}
+    for fname in saved:
+        wav_p = out_dir / fname
+        print(f"  ▶ {fname} ...", end=" ", flush=True)
+        try:
+            text = transcribe_and_save(wav_p, model_name="large-v3")
+            transcripts[fname] = text
+            preview = text[:70] + ("…" if len(text) > 70 else "")
+            print(f"OK")
+            print(f"    {preview}")
+        except Exception as e:
+            print(f"FAILED ({e})")
+
+    # ── Report ───────────────────────────────────────────────────────────
     print(f"\n  Speakers : {n_spk}")
     print(f"  Folder   : {out_dir}/")
     for fname in saved:
         a, _ = sf.read(str(out_dir / fname), dtype="float32")
         rms  = 20 * np.log10(np.sqrt(np.mean(a ** 2)) + 1e-10)
-        print(f"    {fname}  {rms:.1f} dBFS")
+        txt  = fname.replace(".wav", ".txt")
+        print(f"    {fname}  {rms:.1f} dBFS  → {txt}")
     print()
 
 

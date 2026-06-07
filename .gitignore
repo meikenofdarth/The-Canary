@@ -27,8 +27,8 @@ ENV/
 .LSOverride
 
 # The Canary specific
-outputs/             # old outputs (deleted)
-20*/                 # per-run timestamped folders (e.g. 20260607_170809/)
+outputs/             # per-run separated audio + transcript files
+20*/                 # any leftover root-level timestamped folders
 pretrained_models/   # downloaded SepFormer / model weights
 /tmp/
 
