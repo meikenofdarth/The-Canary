@@ -1,44 +1,39 @@
 # Python
 __pycache__/
 *.py[cod]
+*$py.class
+*.so
+.Python
 *.egg-info/
 dist/
 build/
 *.egg
-.venv/
+.eggs/
+
+# Virtual environment
 venv/
 env/
-
-# Models (large files — download separately)
-models/sherpa-onnx-*/
-models/*.onnx
-models/*.bin
-models/*.safetensors
-models/*.pt
-models/**/*.onnx
-models/*.tar.bz2
-models/*.tar.gz
-models/*.zip
-
-# Speaker embeddings (generated locally)
-models/speaker_embeddings/*.npy
-
-# Data
-data/test_audio/*.wav
+ENV/
 
 # IDE
-.vscode/
 .idea/
+.vscode/
 *.swp
 *.swo
-.DS_Store
 
-# Redis
-dump.rdb
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# The Canary specific
+outputs/             # old outputs (deleted)
+20*/                 # per-run timestamped folders (e.g. 20260607_170809/)
+pretrained_models/   # downloaded SepFormer / model weights
+/tmp/
+
+# Jupyter
+.ipynb_checkpoints/
 
 # Logs
 *.log
-
-# Pipeline cache (temporary, auto-deleted)
-.canary_pipe.bin
-.hidden_recording_data.txt
