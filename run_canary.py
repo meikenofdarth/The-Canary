@@ -103,12 +103,28 @@ def _soft_compress(sig, threshold_db=-18.0, ratio=3.0, sr=SAMPLE_RATE):
     return out
 
 
-def _normalize(sig, target_db=-3.0):
-    """Normalise peak to target dBFS."""
-    peak = np.max(np.abs(sig))
-    if peak > 1e-6:
-        sig = sig / peak * (10 ** (target_db / 20.0))
-    return sig
+def _normalize(sig, target_rms_db=-18.0, peak_limit_db=-1.0):
+    """
+    Loudness normalization: targets a comfortable RMS level (-18 dBFS)
+    rather than just peak normalization.
+
+    This is what makes a -34 dBFS quiet recording jump to a loud,
+    clear -18 dBFS without any distortion — pure gain, no clipping.
+    A hard peak limiter at -1 dBFS prevents any overflow.
+    """
+    rms = np.sqrt(np.mean(sig.astype(np.float64) ** 2))
+    if rms < 1e-8:
+        return sig
+    # How much gain do we need to reach target RMS?
+    gain_db = target_rms_db - 20.0 * np.log10(rms)
+    gain    = 10 ** (gain_db / 20.0)
+    sig     = sig * gain
+    # Hard-limit peak so we never clip
+    peak_limit = 10 ** (peak_limit_db / 20.0)
+    peak       = np.max(np.abs(sig))
+    if peak > peak_limit:
+        sig = sig / peak * peak_limit
+    return sig.astype(np.float32)
 
 
 def _denoise(sig, sr, prop_decrease, stationary=False,
@@ -174,7 +190,7 @@ def enhance_single(raw, sr):
                          ratio=3.0, sr=sr).astype(np.float64)
 
     # 5. Normalise
-    sig = _normalize(sig, target_db=-3.0)
+    sig = _normalize(sig)   # RMS loudness to -18 dBFS, peak limited at -1 dBFS
     return sig.astype(np.float32)
 
 
@@ -303,7 +319,7 @@ def enhance_stream(stream, sr):
                          ratio=3.0, sr=sr).astype(np.float64)
 
     # 5. Normalise
-    sig = _normalize(sig, target_db=-3.0)
+    sig = _normalize(sig)   # RMS loudness to -18 dBFS, peak limited at -1 dBFS
     return sig.astype(np.float32)
 
 
@@ -318,6 +334,13 @@ def main():
     # Record
     raw, sr = record()
     sf.write(out_dir / "raw_input.wav", raw, sr, subtype="PCM_16")
+
+    # ── Silence gate ─────────────────────────────────────────────────────────
+    raw_rms_db = 20.0 * np.log10(np.sqrt(np.mean(raw ** 2)) + 1e-10)
+    if raw_rms_db < -55.0:
+        print("\n  No audio detected — please speak closer to the mic.")
+        out_dir.rmdir()   # clean up the empty folder
+        return
 
     # Detect speaker count (runs SepFormer internally)
     print("● Detecting speakers ...")
