@@ -375,23 +375,36 @@ def main():
             saved.append(fname)
 
     print("\n● Transcribing speech to text ...")
-    from asr.transcribe import transcribe_and_save
+    from asr.transcribe import transcribe_and_save, pre_screen
+    ready_speakers = []
     for fname in saved:
         wav_p = out_dir / fname
-        print(f"  ▶ {fname} ...", end=" ", flush=True)
-        try:
+        # Quick pre-screen first (no model, <0.1s)
+        screen = pre_screen(wav_p)
+        tag    = fname.replace("speaker_", "Spk").replace(".wav", "")
+        rms    = screen["rms_db"]
+        ratio  = screen["speech_ratio"]
+
+        if screen["verdict"] == "REJECTED":
+            print(f"  ✗ {fname}  [RMS:{rms:.0f}dBFS | Speech:{ratio:.0%}]  → REJECTED ({screen['reason'].split('—')[1].strip()})")
+            # Still write the rejection .txt
+            transcribe_and_save(wav_p, model_name="base")
+        else:
+            print(f"  ▶ {fname}  [RMS:{rms:.0f}dBFS | Speech:{ratio:.0%}]  → READY — transcribing ...", flush=True)
             text, status = transcribe_and_save(wav_p, model_name="base")
             if status == "SPEECH":
                 preview = text[:80] + ("…" if len(text) > 80 else "")
-                print(f"[SPEECH] {preview}")
-            elif status == "REPETITIVE":
-                print("[REPETITIVE — audio too distorted, transcript suppressed]")
-            elif status == "NO_SPEECH":
-                print("[NO SPEECH — silence]")
+                print(f"    ✓ [{tag}] {preview}")
+                ready_speakers.append(fname)
             else:
-                print(f"[{status}]")
-        except Exception as e:
-            print(f"ERROR: {e}")
+                print(f"    ✗ [{tag}] {status} — transcript discarded")
+
+    # Final verdict summary
+    print()
+    if ready_speakers:
+        print(f"  ✓ Speakers ready for processing : {', '.join(ready_speakers)}")
+    else:
+        print("  ✗ No speaker streams passed quality gate")
 
     # ── Report ───────────────────────────────────────────────────────────
     print(f"\n  Speakers : {n_spk}")
