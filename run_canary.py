@@ -374,21 +374,24 @@ def main():
             sf.write(out_dir / fname, enhanced, sr, subtype="PCM_16")
             saved.append(fname)
 
-    # ── ASR: transcribe each speaker wav → .txt ─────────────────────────────
-    print("\n● Transcribing with Whisper large-v3 ...")
+    print("\n● Transcribing speech to text ...")
     from asr.transcribe import transcribe_and_save
-    transcripts = {}
     for fname in saved:
         wav_p = out_dir / fname
         print(f"  ▶ {fname} ...", end=" ", flush=True)
         try:
-            text = transcribe_and_save(wav_p, model_name="large-v3")
-            transcripts[fname] = text
-            preview = text[:70] + ("…" if len(text) > 70 else "")
-            print(f"OK")
-            print(f"    {preview}")
+            text, status = transcribe_and_save(wav_p, model_name="base")
+            if status == "SPEECH":
+                preview = text[:80] + ("…" if len(text) > 80 else "")
+                print(f"[SPEECH] {preview}")
+            elif status == "REPETITIVE":
+                print("[REPETITIVE — audio too distorted, transcript suppressed]")
+            elif status == "NO_SPEECH":
+                print("[NO SPEECH — silence]")
+            else:
+                print(f"[{status}]")
         except Exception as e:
-            print(f"FAILED ({e})")
+            print(f"ERROR: {e}")
 
     # ── Report ───────────────────────────────────────────────────────────
     print(f"\n  Speakers : {n_spk}")
