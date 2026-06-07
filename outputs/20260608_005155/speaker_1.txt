@@ -1,0 +1,4 @@
+[Language: en]
+[Status: ✗  No speech — silence or below threshold]
+
+(no speech detected in this stream)

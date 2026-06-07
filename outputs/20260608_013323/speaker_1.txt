@@ -1,0 +1,14 @@
+[Language: en]
+[Status: ✓  Meaningful speech detected]
+
+Hihiyaaa 2ndIB speeds its 4, 1 bi ab
+
+--- Segments ---
+[0.00s → 6.86s] Hihiyaaa  [low confidence]
+[7.06s → 10.64s] 2nd  [low confidence]
+[10.64s → 13.12s] IB  [low confidence]
+[13.12s → 13.74s] speeds  [low confidence]
+[13.74s → 21.62s] its  [low confidence]
+[21.62s → 24.66s] 4, 1  [low confidence]
+[24.66s → 27.48s] bi  [low confidence]
+[27.48s → 28.86s] ab  [low confidence]

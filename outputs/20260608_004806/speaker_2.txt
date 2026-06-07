@@ -1,0 +1,8 @@
+[Language: en]
+
+Hey Kennedy, how are you? How was your day? Man. This week has an order.
+
+--- Segments ---
+[0.00s → 3.00s] Hey Kennedy, how are you? How was your day?
+[3.00s → 4.00s] Man.
+[4.00s → 6.00s] This week has an order.

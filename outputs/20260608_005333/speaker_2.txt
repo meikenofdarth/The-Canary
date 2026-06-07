@@ -1,0 +1,6 @@
+[Language: en]
+
+Hey bro, how are you? My day was not that good. Hi, bye
+
+--- Segments ---
+[0.00s → 6.56s] Hey bro, how are you? My day was not that good. Hi, bye
