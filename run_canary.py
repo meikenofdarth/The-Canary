@@ -455,11 +455,11 @@ def drs_shadow(raw: np.ndarray, sr: int, n_spk: int, streams: list) -> dict:
             np.sqrt(np.mean(raw[i * frame_len:(i + 1) * frame_len] ** 2))
             for i in range(n_frames)
         ])
-        noise_floor = float(np.percentile(frame_rms, 10)) + 1e-10
+        noise_floor = float(np.percentile(frame_rms, 25)) + 1e-10
         speech_peak = float(np.percentile(frame_rms, 90)) + 1e-10
         raw_snr_db  = 20.0 * np.log10(speech_peak / noise_floor)
-        # Map: SNR ≥ 30 dB → 0.0 (clean),  SNR ≤ 0 dB → 1.0 (very noisy)
-        noise_level = float(np.clip(1.0 - raw_snr_db / 30.0, 0.0, 1.0))
+        # Map: SNR ≥ 35 dB → 0.0 (clean),  SNR ≤ 5 dB → 1.0 (very noisy)
+        noise_level = float(np.clip(1.0 - (raw_snr_db - 5.0) / 30.0, 0.0, 1.0))
     else:
         noise_level = 0.5
 
@@ -482,23 +482,63 @@ def drs_shadow(raw: np.ndarray, sr: int, n_spk: int, streams: list) -> dict:
         speaker_score * 0.2
     )
 
-    # ── Mode assignment ───────────────────────────────────────────────────
-    # Thresholds calibrated for temporal-overlap scale (0–0.6 typical range):
-    #   A < 0.15  : 1 speaker or clean 2-speaker turn-taking
-    #   B < 0.42  : 2 speakers with some simultaneous speech / mild noise
-    #   C ≥ 0.42  : heavy simultaneous speech, high noise, 3+ speakers
-    if complexity < 0.15:
-        mode, label = "A", "Clean Scene"
-        detail = "1 speaker · low noise · pure turn-taking"
-        icon   = "🟢"
-    elif complexity < 0.42 or noise_level < 0.35:
-        mode, label = "B", "Moderate Interference"
-        detail = "2 speakers · some simultaneous speech · mild noise"
-        icon   = "🟡"
+    # ── Mode assignment with heuristics (Canary Way) ───────────────────────
+    reasons = []
+
+    # Overlap Reason
+    if overlap_prob > 0.7:
+        reasons.append("Critical overlap detected (> 0.7).")
+    elif overlap_prob > 0.2:
+        reasons.append("Moderate overlap detected.")
     else:
+        reasons.append("Low or no speech overlap.")
+
+    # Speaker Count Reason
+    if n_spk >= 3:
+        reasons.append("Three or more speakers present.")
+    elif n_spk == 2:
+        reasons.append("Multiple speakers present.")
+    else:
+        reasons.append("Single speaker.")
+
+    # Noise Reason
+    if noise_level > 0.8:
+        reasons.append("Critical noise level detected (> 0.8).")
+    elif noise_level > 0.35:
+        reasons.append("Noticeable noise detected.")
+    else:
+        reasons.append("Noise below critical threshold.")
+
+    # Apply heuristics
+    if noise_level > 0.8:
         mode, label = "C", "High Interference · Heavy Noise"
-        detail = "heavy simultaneous speech · high noise · 3+ speakers"
+        detail = "critical background noise (> 0.80)"
         icon   = "🔴"
+        reasons.insert(0, "Hard Rule: Critical noise level (> 0.80) forced Mode C.")
+    elif overlap_prob > 0.7:
+        mode, label = "C", "High Interference · Heavy Noise"
+        detail = "critical speech overlap (> 0.70)"
+        icon   = "🔴"
+        reasons.insert(0, "Hard Rule: Critical overlap (> 0.70) forced Mode C.")
+    elif n_spk >= 3:
+        mode, label = "C", "High Interference · Heavy Noise"
+        detail = "3+ speakers detected"
+        icon   = "🔴"
+        reasons.insert(0, "Hard Rule: 3+ speakers forced Mode C.")
+    else:
+        # SCS threshold fallback
+        if complexity < 0.25:
+            mode, label = "A", "Clean Scene"
+            detail = "1 speaker · low noise · pure turn-taking"
+            icon   = "🟢"
+        elif complexity < 0.55:
+            mode, label = "B", "Moderate Interference"
+            detail = "2 speakers · some simultaneous speech · mild noise"
+            icon   = "🟡"
+        else:
+            mode, label = "C", "High Interference · Heavy Noise"
+            detail = "heavy simultaneous speech · high noise · 3+ speakers"
+            icon   = "🔴"
 
     return {
         "mode":             mode,
@@ -510,6 +550,7 @@ def drs_shadow(raw: np.ndarray, sr: int, n_spk: int, streams: list) -> dict:
         "overlap_prob":     round(overlap_prob,  3),
         "speaker_score":    round(speaker_score, 3),
         "speaker_count":    n_spk,
+        "reasons":          reasons,
     }
 
 
@@ -617,12 +658,19 @@ def main():
     # ── DRS Shadow Report ─────────────────────────────────────────────────
     drs = drs_shadow(raw, sr, n_spk, streams)
     print("  " + "─" * 46)
-    print(f"  {drs['icon']}  DRS Mode {drs['mode']}  ·  {drs['label']}")
-    print(f"      {drs['detail']}")
-    print(f"      Complexity  : {drs['complexity_score']:.3f}")
-    print(f"      Noise level : {drs['noise_level']:.3f}   (0 = clean, 1 = very noisy)")
-    print(f"      Simul.speech: {drs['overlap_prob']:.3f}   (0 = pure turn-taking, 1 = always simultaneous)")
-    print(f"      Speakers    : {drs['speaker_count']}")
+    print("  DRS ANALYSIS")
+    print()
+    print(f"  Noise Score     : {drs['noise_level']:.3f}")
+    print(f"  Overlap Score   : {drs['overlap_prob']:.3f}")
+    print(f"  Speaker Score   : {drs['speaker_score']:.3f}")
+    print()
+    print(f"  SCS             : {drs['complexity_score']:.3f}")
+    print()
+    print(f"  Mode            : {drs['mode']}  {drs['icon']}  ({drs['label']})")
+    print()
+    print("  Reason:")
+    for r in drs["reasons"]:
+        print(f"  - {r}")
     print("  " + "─" * 46)
     print()
 
