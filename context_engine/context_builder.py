@@ -204,21 +204,23 @@ def build_context(out_dir: Path, drs: dict, n_spk: int) -> dict:
         idx = active_ww_indices[0]
         transcript = speakers[idx]["transcript"]
         utt = analyze_utterance(transcript)
-        speakers[idx]["type"] = utt["type"]
-        speakers[idx]["type_confidence"] = utt["confidence"]
+        # Any wake-word-addressed speech is considered a directed command/action
+        speakers[idx]["type"] = "COMMAND"
+        speakers[idx]["type_confidence"] = max(utt["confidence"], 0.95)
 
-        command_count = 1 if utt["type"] == "COMMAND" else 0
+        command_count = 1
         conflict = False
         conflict_pair = None
-        route = "EXECUTE" if command_count == 1 else "IGNORE"
+        route = "EXECUTE"
 
     else:
         # Rule 3: if both of them have used the wake word, we classify them
         for idx in active_ww_indices:
             transcript = speakers[idx]["transcript"]
             utt = analyze_utterance(transcript)
-            speakers[idx]["type"] = utt["type"]
-            speakers[idx]["type_confidence"] = utt["confidence"]
+            # Any wake-word-addressed speech is considered a directed command/action
+            speakers[idx]["type"] = "COMMAND"
+            speakers[idx]["type_confidence"] = max(utt["confidence"], 0.95)
 
         command_count = sum(1 for s in speakers if s["wakeword"] and s["type"] == "COMMAND")
         conflict_result = detect_conflict(speakers)

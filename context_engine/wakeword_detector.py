@@ -24,9 +24,14 @@ _FUZZY_MAP: dict[str, float] = {
     "canry":   0.80,
     "canari":  0.80,
     "kenari":  0.70,
+    "kanari":  0.70,
     "qanary":  0.70,
     "cannery": 0.65,
+    "kennery": 0.65,
+    "ganari":  0.65,
+    "genari":  0.65,
     "konari":  0.65,
+    "gonari":  0.60,
     "canery":  0.60,
 }
 
