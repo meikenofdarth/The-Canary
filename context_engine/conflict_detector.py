@@ -74,6 +74,10 @@ _ANTONYM_PAIRS: list[tuple[frozenset, frozenset]] = [
 
 _OVERRIDE_PHRASES: list[str] = [
     "listen to me",
+    "is sent to me",
+    "is send to me",
+    "sent to me",
+    "send to me",
     "don't listen",
     "dont listen",
     "ignore him",

@@ -210,6 +210,8 @@ _COMMAND_RE_STRINGS: list[str] = [
 
     # ── Attention Control / Speaker Override ──────────────────────────────
     r"\blisten\s+to\s+(me|my\s+voice)\b",
+    r"\b(is\s+)?sen[td]\s+to\s+me\b",
+    r"\blisten(ed|ing)?\s+to\s+me\b",
     r"\b(don't|dont)\s+listen\s+to\s+(him|her|them)\b",
     r"\b(don't|dont)\s+listen\b",
     r"\bignore\s+(him|her|them)\b",
