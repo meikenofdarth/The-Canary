@@ -1,0 +1,37 @@
+{
+  "timestamp": "2026-06-09T00:10:06.483455",
+  "session_dir": "outputs/20260609_000953",
+  "drs_mode": "A",
+  "scene": {
+    "speaker_count": 2,
+    "complexity": 0.106,
+    "noise_level": 0.0,
+    "simul_speech": 0.012
+  },
+  "speakers": [
+    {
+      "id": "speaker_1",
+      "status": "READY",
+      "transcript": "Hi Canary, listen to me. Hey Canary, no, you listen to me only.",
+      "wakeword": true,
+      "wakeword_confidence": 1.0,
+      "wakeword_phrase": "hey canary",
+      "type": "CONVERSATION",
+      "type_confidence": 0.75
+    },
+    {
+      "id": "speaker_2",
+      "status": "READY",
+      "transcript": "Hi Canary, listen to me.",
+      "wakeword": true,
+      "wakeword_confidence": 1.0,
+      "wakeword_phrase": "canary",
+      "type": "CONVERSATION",
+      "type_confidence": 0.75
+    }
+  ],
+  "wakeword_count": 2,
+  "conflict": false,
+  "conflict_pair": null,
+  "route": "MULTI_EXECUTE"
+}

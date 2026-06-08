@@ -1,0 +1,8 @@
+[Language: en]
+[Status: ✓  READY — meaningful speech detected]
+[RMS: -23.4 dBFS | Speech ratio: 64%]
+
+Hey Canary, can you play with this song and music fast?
+
+--- Segments ---
+[0.00s → 7.00s] Hey Canary, can you play with this song and music fast?

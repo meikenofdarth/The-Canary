@@ -1,0 +1,8 @@
+[Language: en]
+[Status: ✓  READY — meaningful speech detected]
+[RMS: -28.2 dBFS | Speech ratio: 24%]
+
+Hi Canary, listen to me.
+
+--- Segments ---
+[0.00s → 7.00s] Hi Canary, listen to me.

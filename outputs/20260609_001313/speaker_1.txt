@@ -1,0 +1,9 @@
+[Language: en]
+[Status: ✓  READY — meaningful speech detected]
+[RMS: -20.5 dBFS | Speech ratio: 31%]
+
+Cannery, no listen to me. No, no, no.
+
+--- Segments ---
+[0.00s → 3.56s] Cannery, no listen to me.
+[3.56s → 4.56s] No, no, no.

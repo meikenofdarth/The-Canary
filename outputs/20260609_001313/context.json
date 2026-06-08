@@ -1,0 +1,37 @@
+{
+  "timestamp": "2026-06-09T00:13:27.906467",
+  "session_dir": "outputs/20260609_001313",
+  "drs_mode": "B",
+  "scene": {
+    "speaker_count": 2,
+    "complexity": 0.341,
+    "noise_level": 0.0,
+    "simul_speech": 0.483
+  },
+  "speakers": [
+    {
+      "id": "speaker_1",
+      "status": "READY",
+      "transcript": "Cannery, no listen to me. No, no, no.",
+      "wakeword": true,
+      "wakeword_confidence": 0.65,
+      "wakeword_phrase": "~cannery",
+      "type": "QUESTION",
+      "type_confidence": 0.85
+    },
+    {
+      "id": "speaker_2",
+      "status": "READY",
+      "transcript": "Hey Canary, can you play me this song and music pause?",
+      "wakeword": true,
+      "wakeword_confidence": 1.0,
+      "wakeword_phrase": "hey canary",
+      "type": "COMMAND",
+      "type_confidence": 0.95
+    }
+  ],
+  "wakeword_count": 2,
+  "conflict": false,
+  "conflict_pair": null,
+  "route": "MULTI_EXECUTE"
+}

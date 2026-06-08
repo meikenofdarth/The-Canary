@@ -626,6 +626,14 @@ def main():
     print("  " + "─" * 46)
     print()
 
+    # ── Context Engine (shadow — never crashes the main pipeline) ─────────
+    try:
+        from context_engine import build_context
+        build_context(out_dir, drs, n_spk)
+    except Exception as _ctx_err:
+        print(f"  [Context Engine] skipped — {_ctx_err}")
+
 
 if __name__ == "__main__":
     main()
+
