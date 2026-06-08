@@ -1,9 +1,0 @@
-[Language: en]
-[Status: ✓  READY — meaningful speech detected]
-[RMS: -21.1 dBFS | Speech ratio: 79%]
-
-Cannery play, I need to sing cannery play. I need to sing cannery play.
-
---- Segments ---
-[0.00s → 4.90s] Cannery play, I need to sing cannery play.  [low confidence]
-[4.90s → 7.60s] I need to sing cannery play.  [low confidence]
