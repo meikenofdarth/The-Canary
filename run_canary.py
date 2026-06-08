@@ -491,7 +491,7 @@ def drs_shadow(raw: np.ndarray, sr: int, n_spk: int, streams: list) -> dict:
         mode, label = "A", "Clean Scene"
         detail = "1 speaker · low noise · pure turn-taking"
         icon   = "🟢"
-    elif complexity < 0.42:
+    elif complexity < 0.42 or noise_level < 0.35:
         mode, label = "B", "Moderate Interference"
         detail = "2 speakers · some simultaneous speech · mild noise"
         icon   = "🟡"
