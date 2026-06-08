@@ -1,9 +1,0 @@
-[Language: en]
-[Status: ✓  Meaningful speech detected]
-
-Hey bro, how are you? My day was not that good. Let's see.
-
---- Segments ---
-[0.00s → 2.00s] Hey bro, how are you?
-[2.00s → 4.00s] My day was not that good.
-[4.00s → 6.00s] Let's see.

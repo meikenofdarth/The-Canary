@@ -142,6 +142,23 @@ def _denoise(sig, sr, prop_decrease, stationary=False,
         )
 
 
+def si_snr(estimate: np.ndarray, reference: np.ndarray) -> float:
+    """
+    Scale-Invariant Signal-to-Noise Ratio (dB).
+    Measures how well `estimate` reconstructs `reference`.
+    Higher = better separation quality.
+    Formula: SI-SNR = 10 * log10( ||s_target||² / ||e_noise||² )
+    """
+    ref = reference.astype(np.float64) - np.mean(reference)
+    est = estimate.astype(np.float64)  - np.mean(estimate)
+    alpha  = np.dot(est, ref) / (np.dot(ref, ref) + 1e-10)
+    target = alpha * ref
+    noise  = est - target
+    return float(10.0 * np.log10(
+        (np.dot(target, target) + 1e-10) / (np.dot(noise, noise) + 1e-10)
+    ))
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 #  PATH A – SINGLE SPEAKER  (direct enhancement, no SepFormer involved)
 # ─────────────────────────────────────────────────────────────────────────────
@@ -256,6 +273,64 @@ def _speech_band_rms(audio, sr, lo=300, hi=3400):
     return float(np.sqrt(np.mean(sosfilt(sos, audio.astype(np.float64)) ** 2)))
 
 
+def _reduce_crosstalk(streams: list) -> list:
+    """
+    Gram-Schmidt cross-talk suppression between separated streams.
+
+    SepFormer almost always leaves some bleed-through: a little of speaker B
+    leaks into the speaker A stream and vice-versa.  This function removes
+    the linear projection of each stream onto every other stream, making the
+    outputs orthogonal.  Peak level is preserved so no loudness change occurs.
+    """
+    if len(streams) < 2:
+        return streams
+    clean = [s.astype(np.float64) for s in streams]
+    for i in range(len(clean)):
+        for j in range(len(clean)):
+            if i == j:
+                continue
+            denom    = np.dot(clean[j], clean[j]) + 1e-10
+            alpha    = np.dot(clean[i], clean[j]) / denom
+            clean[i] = clean[i] - alpha * clean[j]
+    result = []
+    for orig, c in zip(streams, clean):
+        orig_peak = float(np.max(np.abs(orig))) + 1e-10
+        c_peak    = float(np.max(np.abs(c)))    + 1e-10
+        result.append((c * (orig_peak / c_peak)).astype(np.float32))
+    return result
+
+
+def _temporal_overlap(s1: np.ndarray, s2: np.ndarray, sr: int,
+                      frame_ms: int = 30) -> float:
+    """
+    Fraction of time both streams have active speech simultaneously.
+
+      0.00 = pure turn-taking (speakers never talk at the same time)
+      1.00 = both always talking at once (fully overlapping speech)
+
+    Uses the same energy-VAD logic as the pre-screening gate:
+    voiced = frame RMS > 3 × noise floor (10th percentile).
+    """
+    frame_len = max(1, int(sr * frame_ms / 1000))
+    n = min(len(s1), len(s2)) // frame_len
+    if n == 0:
+        return 0.0
+
+    def voiced(sig):
+        rms_f = np.array([
+            np.sqrt(np.mean(sig[i * frame_len:(i + 1) * frame_len] ** 2))
+            for i in range(n)
+        ])
+        floor = float(np.percentile(rms_f, 10)) + 1e-10
+        return rms_f > floor * 3.0
+
+    v1     = voiced(s1.astype(np.float32))
+    v2     = voiced(s2.astype(np.float32))
+    both   = float(np.sum(v1 & v2))
+    either = float(np.sum(v1 | v2)) + 1e-10
+    return float(both / either)
+
+
 def detect_and_separate(raw, sr):
     """
     2-speaker auto-detection using SepFormer-libri2mix.
@@ -355,10 +430,93 @@ def enhance_stream(stream, sr):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+#  DRS SHADOW  (pure observer — no routing changes)
+# ─────────────────────────────────────────────────────────────────────────────
+def drs_shadow(raw: np.ndarray, sr: int, n_spk: int, streams: list) -> dict:
+    """
+    Dynamic Resource Scaler — shadow / observe mode only.
+    Reads signals already produced by the pipeline; changes nothing.
+
+    Complexity score:
+        complexity = overlap_probability * 0.5
+                   + noise_level        * 0.3
+                   + speaker_score      * 0.2
+
+    Thresholds (calibrated on real recordings):
+        < 0.30  → Mode A  Clean Scene
+        < 0.70  → Mode B  Moderate Interference
+        ≥ 0.70  → Mode C  High Interference · Heavy Noise
+    """
+    # ── Noise level (0–1) via in-band SNR of raw signal ──────────────────
+    frame_len = max(1, int(sr * 0.030))           # 30 ms frames
+    n_frames  = len(raw) // frame_len
+    if n_frames > 0:
+        frame_rms   = np.array([
+            np.sqrt(np.mean(raw[i * frame_len:(i + 1) * frame_len] ** 2))
+            for i in range(n_frames)
+        ])
+        noise_floor = float(np.percentile(frame_rms, 10)) + 1e-10
+        speech_peak = float(np.percentile(frame_rms, 90)) + 1e-10
+        raw_snr_db  = 20.0 * np.log10(speech_peak / noise_floor)
+        # Map: SNR ≥ 30 dB → 0.0 (clean),  SNR ≤ 0 dB → 1.0 (very noisy)
+        noise_level = float(np.clip(1.0 - raw_snr_db / 30.0, 0.0, 1.0))
+    else:
+        noise_level = 0.5
+
+    # ── Temporal overlap (0–1): fraction of frames both streams are voiced ─
+    # Measures how often speakers talk at the same time (simultaneous speech).
+    # 0.0 = pure turn-taking · 1.0 = always talking simultaneously.
+    # NOTE: computed AFTER cross-talk reduction so streams reflect real activity.
+    if n_spk >= 2 and len(streams) >= 2:
+        overlap_prob = _temporal_overlap(streams[0], streams[1], sr)
+    else:
+        overlap_prob = 0.0   # single speaker → no overlap by definition
+
+    # ── Speaker count score (0–1) ─────────────────────────────────────────
+    speaker_score = float(np.clip((n_spk - 1) / 2.0, 0.0, 1.0))
+
+    # ── Complexity score ──────────────────────────────────────────────────
+    complexity = (
+        overlap_prob  * 0.5 +
+        noise_level   * 0.3 +
+        speaker_score * 0.2
+    )
+
+    # ── Mode assignment ───────────────────────────────────────────────────
+    # Thresholds calibrated for temporal-overlap scale (0–0.6 typical range):
+    #   A < 0.15  : 1 speaker or clean 2-speaker turn-taking
+    #   B < 0.42  : 2 speakers with some simultaneous speech / mild noise
+    #   C ≥ 0.42  : heavy simultaneous speech, high noise, 3+ speakers
+    if complexity < 0.15:
+        mode, label = "A", "Clean Scene"
+        detail = "1 speaker · low noise · pure turn-taking"
+        icon   = "🟢"
+    elif complexity < 0.42:
+        mode, label = "B", "Moderate Interference"
+        detail = "2 speakers · some simultaneous speech · mild noise"
+        icon   = "🟡"
+    else:
+        mode, label = "C", "High Interference · Heavy Noise"
+        detail = "heavy simultaneous speech · high noise · 3+ speakers"
+        icon   = "🔴"
+
+    return {
+        "mode":             mode,
+        "label":            label,
+        "detail":           detail,
+        "icon":             icon,
+        "complexity_score": round(complexity,    3),
+        "noise_level":      round(noise_level,   3),
+        "overlap_prob":     round(overlap_prob,  3),
+        "speaker_score":    round(speaker_score, 3),
+        "speaker_count":    n_spk,
+    }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 #  MAIN
 # ─────────────────────────────────────────────────────────────────────────────
-def main(max_speakers: int = 2):
-    """max_speakers=2 → libri2mix (default); max_speakers=3 → libri3mix."""
+def main():
     OUTPUT_ROOT = Path("outputs")
     OUTPUT_ROOT.mkdir(exist_ok=True)
 
@@ -377,12 +535,25 @@ def main(max_speakers: int = 2):
         out_dir.rmdir()   # clean up the empty folder
         return
 
-    # Detect speaker count (runs SepFormer internally)
+    # Detect speaker count (always uses libri2mix)
     print("● Detecting speakers ...")
-    if max_speakers == 3:
-        n_spk, streams = detect_and_separate_3spk(raw, sr)
-    else:
-        n_spk, streams = detect_and_separate(raw, sr)
+    n_spk, streams = detect_and_separate(raw, sr)
+
+    # ── Cross-talk reduction + rank by speech content (dominant → first) ──
+    # This ensures speaker_1.wav is always the main/loudest speaker,
+    # and reduces SepFormer bleed-through before enhancement.
+    if n_spk >= 2 and len(streams) >= 2:
+        streams = _reduce_crosstalk(streams)
+        streams = sorted(streams,
+                         key=lambda s: _speech_band_rms(s, sr), reverse=True)
+        print("  (cross-talk reduced · dominant speaker → speaker_1)")
+
+    # ── Si-SNR vs raw mix ─────────────────────────────────────────────────
+    if n_spk >= 2 and len(streams) >= 2:
+        print("  Si-SNR vs mix:")
+        for i, s in enumerate(streams, 1):
+            score = si_snr(s, raw)
+            print(f"    Speaker {i}: {score:+.1f} dB")
 
     if n_spk == 1:
         # ── Single speaker: direct enhancement ───────────────────────────
@@ -443,15 +614,18 @@ def main(max_speakers: int = 2):
         print(f"    {fname}  {rms:.1f} dBFS  → {txt}")
     print()
 
+    # ── DRS Shadow Report ─────────────────────────────────────────────────
+    drs = drs_shadow(raw, sr, n_spk, streams)
+    print("  " + "─" * 46)
+    print(f"  {drs['icon']}  DRS Mode {drs['mode']}  ·  {drs['label']}")
+    print(f"      {drs['detail']}")
+    print(f"      Complexity  : {drs['complexity_score']:.3f}")
+    print(f"      Noise level : {drs['noise_level']:.3f}   (0 = clean, 1 = very noisy)")
+    print(f"      Simul.speech: {drs['overlap_prob']:.3f}   (0 = pure turn-taking, 1 = always simultaneous)")
+    print(f"      Speakers    : {drs['speaker_count']}")
+    print("  " + "─" * 46)
+    print()
+
 
 if __name__ == "__main__":
-    import argparse
-    parser = argparse.ArgumentParser(
-        description="The Canary — Real-Time Multi-Speaker Separation"
-    )
-    parser.add_argument(
-        "--speakers", type=int, default=2, choices=[2, 3],
-        help="Max speakers to separate: 2 (default, libri2mix) or 3 (libri3mix)",
-    )
-    args = parser.parse_args()
-    main(max_speakers=args.speakers)
+    main()

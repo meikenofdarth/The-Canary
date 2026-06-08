@@ -1,0 +1,8 @@
+[Language: en]
+[Status: ✓  READY — meaningful speech detected]
+[RMS: -22.9 dBFS | Speech ratio: 86%]
+
+I literally said they drafted Nags' Q-Bug or shift, shift, shift, so one minute.
+
+--- Segments ---
+[0.00s → 7.00s] I literally said they drafted Nags' Q-Bug or shift, shift, shift, so one minute.  [low confidence]

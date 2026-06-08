@@ -1,0 +1,11 @@
+[Language: hi]
+[Status: ✓  READY — meaningful speech detected]
+[RMS: -19.7 dBFS | Speech ratio: 81%]
+
+Aloo, how are you? Today's task is very important. Today's the day is getting very busy. Hey, when will you come?
+
+--- Segments ---
+[0.00s → 2.00s] Aloo, how are you?  [low confidence]
+[2.00s → 4.00s] Today's task is very important.  [low confidence]
+[4.00s → 6.00s] Today's the day is getting very busy.  [low confidence]
+[6.00s → 8.00s] Hey, when will you come?  [low confidence]

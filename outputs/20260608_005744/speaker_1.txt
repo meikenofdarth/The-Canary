@@ -1,8 +1,0 @@
-[Language: en]
-[Status: ✓  Meaningful speech detected]
-
-Hello, so I am going to buy a travel and I have a bucket of water in my room. I can eat a bit of air.
-
---- Segments ---
-[0.00s → 5.00s] Hello, so I am going to buy a travel and I have a bucket of water in my room.
-[5.00s → 7.00s] I can eat a bit of air.

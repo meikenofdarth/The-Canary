@@ -145,17 +145,14 @@ def _compression_ratio(text: str) -> float:
     return len(b) / len(zlib.compress(b))
 
 
-def classify_speech(result: dict) -> str:
+def classify_speech(result: dict, has_vad_speech: bool = False) -> str:
     """
     Classify Whisper output after transcription.
 
-    Checks:
-      • no_speech_prob average  — Whisper's internal silence detector
-      • avg_logprob average     — Whisper's confidence per segment
-                                  Good speech: > -1.0
-                                  Gibberish:   < -1.2
-      • Repetition n-gram check — hallucination loop detection
-      • Compression ratio       — another hallucination signal
+    has_vad_speech: True when VAD pre-screen already confirmed ≥15% voiced
+                    frames. In that case Whisper's no_speech_prob alone cannot
+                    reclassify to NO_SPEECH — it becomes NOISE instead
+                    (audio IS present, just too distorted to transcribe).
 
     Returns: 'SPEECH' | 'NO_SPEECH' | 'NOISE' | 'LOW_CONFIDENCE' | 'REPETITIVE'
     """
@@ -163,11 +160,13 @@ def classify_speech(result: dict) -> str:
     segments = result.get("segments", [])
 
     if not text or not segments:
-        return "NO_SPEECH"
+        # VAD confirmed speech was present → audio exists but indecipherable
+        return "NOISE" if has_vad_speech else "NO_SPEECH"
 
     avg_no_speech = float(np.mean([s.get("no_speech_prob", 0.0) for s in segments]))
     if avg_no_speech > 0.65:
-        return "NO_SPEECH"
+        # VAD says speech was there → distorted audio, not true silence
+        return "NOISE" if has_vad_speech else "NO_SPEECH"
 
     # ── Test 3: avg_logprob ────────────────────────────────────────────────
     # Whisper returns avg_logprob per segment (log-probability of the tokens).
@@ -199,12 +198,11 @@ def transcribe(
     wav_path: str | Path,
     model_name: str = "base",
     language: Optional[str] = None,
+    has_vad_speech: bool = False,
 ) -> dict:
     """
     Transcribe a speaker WAV using Whisper.
-    Caller should run pre_screen() first and only call this for READY streams.
-
-    Returns dict: text, language, segments (with avg_logprob + no_speech_prob), status
+    has_vad_speech: passed through to classify_speech to fix NO_SPEECH false positives.
     """
     wav_path = Path(wav_path)
     model    = _load_model(model_name)
@@ -227,7 +225,7 @@ def transcribe(
             task="transcribe",
             fp16=False,
             verbose=False,
-            temperature=(0.0, 0.2, 0.4, 0.6, 0.8, 1.0),  # auto-fallback on loops
+            temperature=(0.0, 0.2, 0.4, 0.6, 0.8, 1.0),
             compression_ratio_threshold=1.8,
             logprob_threshold=-1.2,
             no_speech_threshold=0.5,
@@ -250,9 +248,8 @@ def transcribe(
         "language": result.get("language", "unknown"),
         "segments": segments,
     }
-    raw["status"] = classify_speech(raw)
+    raw["status"] = classify_speech(raw, has_vad_speech=has_vad_speech)
 
-    # Wipe hallucinated text
     if raw["status"] in ("REPETITIVE", "LOW_CONFIDENCE"):
         raw["text"] = ""
 
@@ -280,15 +277,13 @@ def transcribe_and_save(
 ) -> tuple[str, str]:
     """
     Full pipeline: pre-screen → Whisper → post-screen → save .txt.
-
     Returns (transcript_text, status_string).
-    Status is one of: SPEECH | NO_SPEECH | NOISE | LOW_CONFIDENCE |
-                      REPETITIVE | PRE_REJECTED
     """
+    import math
     wav_path = Path(wav_path)
     txt_path = wav_path.with_suffix(".txt")
 
-    # ── Pre-screening gate (Tests 1 + 2) ─────────────────────────────────
+    # ── Pre-screening (Tests 1 + 2) ──────────────────────────────────────────
     screen = pre_screen(wav_path)
 
     if screen["verdict"] == "REJECTED":
