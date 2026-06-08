@@ -207,6 +207,18 @@ _COMMAND_RE_STRINGS: list[str] = [
     # ── Raise / Lower (generic direction) ─────────────────────────────────
     r"\braise\b",
     r"\blower\b",
+
+    # ── Attention Control / Speaker Override ──────────────────────────────
+    r"\blisten\s+to\s+(me|my\s+voice)\b",
+    r"\b(don't|dont)\s+listen\s+to\s+(him|her|them)\b",
+    r"\b(don't|dont)\s+listen\b",
+    r"\bignore\s+(him|her|them)\b",
+    r"\bpay\s+attention\b",
+    r"\bfocus\s+on\s+me\b",
+    r"\btalk\s+to\s+me\b",
+    r"\bspeak\s+to\s+me\b",
+    r"\bstop\s+listening\b",
+    r"\boverride\b",
 ]
 
 # ─────────────────────────────────────────────────────────────────────────────

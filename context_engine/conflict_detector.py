@@ -72,6 +72,22 @@ _ANTONYM_PAIRS: list[tuple[frozenset, frozenset]] = [
 ]
 
 
+_OVERRIDE_PHRASES: list[str] = [
+    "listen to me",
+    "don't listen",
+    "dont listen",
+    "ignore him",
+    "ignore her",
+    "ignore them",
+    "pay attention",
+    "focus on me",
+    "talk to me",
+    "speak to me",
+    "stop listening",
+    "override",
+]
+
+
 def detect_conflict(speaker_data: list[dict]) -> dict:
     """
     Check whether multiple wakeword-command speakers issued opposing commands.
@@ -100,6 +116,28 @@ def detect_conflict(speaker_data: list[dict]) -> dict:
 
     if len(active) < 2:
         return {"conflict": False, "conflict_pair": None}
+
+    # ── Check for attention overrides/redirection commands ────────────────
+    for s in active:
+        txt = s.get("transcript", "").lower()
+        matched_override = next((p for p in _OVERRIDE_PHRASES if p in txt), None)
+        if matched_override:
+            # Find the other active speaker to form the conflict pair
+            other = next((o for o in active if o["id"] != s["id"]), None)
+            other_word = "command"
+            if other:
+                other_txt = other.get("transcript", "").lower()
+                # Check if other speaker also used an override
+                other_override = next((p for p in _OVERRIDE_PHRASES if p in other_txt), None)
+                if other_override:
+                    other_word = other_override
+                else:
+                    # Look for standard command verbs
+                    for word in ["play", "stop", "pause", "turn", "switch", "lock", "unlock", "set", "open", "close", "call", "brew"]:
+                        if word in other_txt:
+                            other_word = word
+                            break
+            return {"conflict": True, "conflict_pair": [matched_override, other_word]}
 
     texts = [s.get("transcript", "").lower() for s in active]
 

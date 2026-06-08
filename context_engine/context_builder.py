@@ -165,7 +165,7 @@ def build_context(out_dir: Path, drs: dict, n_spk: int) -> dict:
     out_dir = Path(out_dir)
     speakers: list[dict] = []
 
-    # ── Analyse each speaker stream ───────────────────────────────────────
+    # ── Phase 1: Parse transcripts and detect wake words for all speakers ────
     for i in range(1, n_spk + 1):
         spk_id   = f"speaker_{i}"
         txt_path = out_dir / f"{spk_id}.txt"
@@ -173,11 +173,9 @@ def build_context(out_dir: Path, drs: dict, n_spk: int) -> dict:
         transcript, status = _parse_transcript(txt_path)
 
         if transcript:
-            ww  = detect_wakeword(transcript)
-            utt = analyze_utterance(transcript)
+            ww = detect_wakeword(transcript)
         else:
-            ww  = {"wakeword": False, "wakeword_confidence": 0.0, "matched_phrase": None}
-            utt = {"type": "UNKNOWN", "confidence": 0.0}
+            ww = {"wakeword": False, "wakeword_confidence": 0.0, "matched_phrase": None}
 
         speakers.append({
             "id":                  spk_id,
@@ -186,29 +184,55 @@ def build_context(out_dir: Path, drs: dict, n_spk: int) -> dict:
             "wakeword":            ww["wakeword"],
             "wakeword_confidence": ww["wakeword_confidence"],
             "wakeword_phrase":     ww["matched_phrase"],
-            "type":                utt["type"],
-            "type_confidence":     utt["confidence"],
+            "type":                "UNKNOWN",
+            "type_confidence":     0.0,
         })
 
-    # ── Routing (intent-driven, not timing-driven) ─────────────────────────────
-    # wakeword_count   = everyone who said "Canary" (including background mentions)
-    # command_count    = speakers who said "Canary" AND issued a real COMMAND
-    #                    This is what actually drives routing.
-    wakeword_count = sum(1 for s in speakers if s["wakeword"])
-    command_count  = sum(
-        1 for s in speakers
-        if s["wakeword"] and s["type"] == "COMMAND"
-    )
-    conflict_result = detect_conflict(speakers)
+    # ── Phase 2: Apply Routing Rules ─────────────────────────────────────────
+    active_ww_indices = [idx for idx, s in enumerate(speakers) if s["wakeword"]]
+    wakeword_count = len(active_ww_indices)
 
-    if command_count == 0:
-        route = "IGNORE"          # nobody gave Canary an actionable command
-    elif command_count == 1:
-        route = "EXECUTE"         # exactly one wakeword command — clear to proceed
-    elif conflict_result["conflict"]:
-        route = "CLARIFY"         # multiple commands that oppose each other
+    if wakeword_count == 0:
+        # Rule 1: if no wake word is detected, stop the computation completely
+        command_count = 0
+        conflict = False
+        conflict_pair = None
+        route = "IGNORE"
+
+    elif wakeword_count == 1:
+        # Rule 2: if one speaker says the wake word, we can ignore the next person
+        idx = active_ww_indices[0]
+        transcript = speakers[idx]["transcript"]
+        utt = analyze_utterance(transcript)
+        speakers[idx]["type"] = utt["type"]
+        speakers[idx]["type_confidence"] = utt["confidence"]
+
+        command_count = 1 if utt["type"] == "COMMAND" else 0
+        conflict = False
+        conflict_pair = None
+        route = "EXECUTE" if command_count == 1 else "IGNORE"
+
     else:
-        route = "MULTI_EXECUTE"   # multiple non-conflicting commands
+        # Rule 3: if both of them have used the wake word, we classify them
+        for idx in active_ww_indices:
+            transcript = speakers[idx]["transcript"]
+            utt = analyze_utterance(transcript)
+            speakers[idx]["type"] = utt["type"]
+            speakers[idx]["type_confidence"] = utt["confidence"]
+
+        command_count = sum(1 for s in speakers if s["wakeword"] and s["type"] == "COMMAND")
+        conflict_result = detect_conflict(speakers)
+        conflict = conflict_result["conflict"]
+        conflict_pair = conflict_result.get("conflict_pair")
+
+        if command_count == 0:
+            route = "IGNORE"
+        elif command_count == 1:
+            route = "EXECUTE"
+        elif conflict:
+            route = "CLARIFY"
+        else:
+            route = "MULTI_EXECUTE"
 
     # ── Assemble ──────────────────────────────────────────────────────────
     context: dict = {
@@ -224,8 +248,8 @@ def build_context(out_dir: Path, drs: dict, n_spk: int) -> dict:
         "speakers":       speakers,
         "wakeword_count":  wakeword_count,
         "command_count":   command_count,
-        "conflict":        conflict_result["conflict"],
-        "conflict_pair":   conflict_result.get("conflict_pair"),
+        "conflict":        conflict,
+        "conflict_pair":   conflict_pair,
         "route":           route,
     }
 
