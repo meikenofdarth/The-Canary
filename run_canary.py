@@ -4,6 +4,8 @@ run_canary.py  –  The Canary Speaker Separation
 ================================================
 Run:  python3 run_canary.py
 
+
+
 Two smart paths:
   • 1 speaker  → direct enhancement of raw recording (no SepFormer artifacts)
   • 2 speakers → SepFormer separation + per-stream enhancement
