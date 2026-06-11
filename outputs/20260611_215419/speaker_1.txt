@@ -1,0 +1,8 @@
+[Language: en]
+[Status: ✓  READY — meaningful speech detected]
+[RMS: -20.2 dBFS | Speech ratio: 64%]
+
+Hi Canary, how are you? How was your day? Can you please please play me some arid jitsing?
+
+--- Segments ---
+[0.00s → 7.00s] Hi Canary, how are you? How was your day? Can you please please play me some arid jitsing?

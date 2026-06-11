@@ -1,0 +1,28 @@
+{
+  "timestamp": "2026-06-11T21:54:34.608146",
+  "session_dir": "outputs/20260611_215419",
+  "drs_mode": "A",
+  "scene": {
+    "speaker_count": 1,
+    "complexity": 0.135,
+    "noise_level": 0.449,
+    "simul_speech": 0.0
+  },
+  "speakers": [
+    {
+      "id": "speaker_1",
+      "status": "READY",
+      "transcript": "Hi Canary, how are you? How was your day? Can you please please play me some arid jitsing?",
+      "wakeword": true,
+      "wakeword_confidence": 1.0,
+      "wakeword_phrase": "hi canary",
+      "type": "COMMAND",
+      "type_confidence": 0.95
+    }
+  ],
+  "wakeword_count": 1,
+  "command_count": 1,
+  "conflict": false,
+  "conflict_pair": null,
+  "route": "EXECUTE"
+}

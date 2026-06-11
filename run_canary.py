@@ -645,6 +645,24 @@ def main():
     else:
         print("  ✗ No speaker streams passed quality gate")
 
+    # ── Voice Identity Engine ─────────────────────────────────────────────
+    # Runs after ASR, completely independent of DRS / separation / context.
+    # Never crashes the main pipeline — wrapped in try/except.
+    voice_ids = {}
+    try:
+        from voice_computation.ranker import identify_speakers, print_result
+        print("\n● Identifying speakers ...")
+        voice_ids = identify_speakers(saved, out_dir)
+        print()
+        print("  " + "─" * 46)
+        print("  VOICE IDENTITY")
+        print()
+        for fname, result in voice_ids.items():
+            print_result(fname, result)
+        print("  " + "─" * 46)
+    except Exception as _vid_err:
+        print(f"  [Voice ID] skipped — {_vid_err}")
+
     # ── Report ───────────────────────────────────────────────────────────
     print(f"\n  Speakers : {n_spk}")
     print(f"  Folder   : {out_dir}/")

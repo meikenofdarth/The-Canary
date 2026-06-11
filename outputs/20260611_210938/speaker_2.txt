@@ -1,0 +1,9 @@
+[Language: en]
+[Status: ✓  READY — meaningful speech detected]
+[RMS: -27.6 dBFS | Speech ratio: 46%]
+
+I'll do it. Thanks.
+
+--- Segments ---
+[0.00s → 1.00s] I'll do it.  [low confidence]
+[5.50s → 6.50s] Thanks.  [low confidence]
