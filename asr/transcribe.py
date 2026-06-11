@@ -35,7 +35,21 @@ _model_cache: dict = {}
 # ─────────────────────────────────────────────────────────────────────────────
 def _load_model(model_name: str = "base"):
     if model_name not in _model_cache:
-        import whisper
+        try:
+            import whisper
+            if not hasattr(whisper, "load_model"):
+                raise ImportError("The wrong 'whisper' package is installed.")
+        except (ImportError, AttributeError) as e:
+            print("\n" + "="*80)
+            print("ERROR: The wrong 'whisper' package is installed on this system.")
+            print("Please run the following commands to install the correct package:")
+            print("  pip uninstall -y whisper")
+            print("  pip install openai-whisper")
+            print("="*80 + "\n")
+            raise ImportError(
+                "Whisper package mismatch. Run 'pip uninstall whisper' and 'pip install openai-whisper'."
+            ) from e
+
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             print(f"    [ASR] Loading Whisper {model_name} ...")

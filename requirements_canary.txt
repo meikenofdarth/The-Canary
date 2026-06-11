@@ -1,8 +1,9 @@
 # The Canary – Speaker Separation & Denoising
 # Additional requirements (beyond what's already in venv)
 
-# Core audio ML
-speechbrain>=1.0.0          # SepFormer pretrained separation
+# Core ASR & audio ML
+openai-whisper              # ASR transcription (do NOT install 'whisper' via pip, use 'openai-whisper'!)
+speechbrain>=1.0.0          # SepFormer pretrained separation and speaker profiling
 noisereduce>=3.0.0          # Spectral noise reduction
 
 # Audio I/O (likely already present)
@@ -24,3 +25,19 @@ typer>=0.9.0
 
 # PyTorch (already in venv)
 torch>=2.0.0
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  TROUBLESHOOTING & PORTABILITY NOTES
+# ─────────────────────────────────────────────────────────────────────────────
+# 1. AttributeError: module 'whisper' has no attribute 'load_model'
+#    This happens if you accidentally installed the 'whisper' package instead of
+#    'openai-whisper'. To fix this, run:
+#        pip uninstall whisper
+#        pip install openai-whisper
+#
+# 2. PortAudio / sounddevice issues
+#    The sounddevice package depends on PortAudio. If you get PortAudio errors:
+#    - macOS: brew install portaudio
+#    - Linux (Ubuntu/Debian): sudo apt-get install portaudio19-dev
+#    - Windows: PortAudio is usually packaged with the wheel, but if not, check sounddevice docs.
+
