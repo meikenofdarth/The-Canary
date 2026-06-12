@@ -151,9 +151,108 @@ def identify(audio: np.ndarray, sr: int,
     return rank(scores)
 
 
-def identify_speakers(saved_files: list, out_dir: Path) -> dict:
+def si_snr(estimate: np.ndarray, reference: np.ndarray) -> float:
     """
-    Batch-identify all speaker .wav files from a run_canary.py output session.
+    Scale-Invariant Signal-to-Noise Ratio (dB).
+    Measures how well `estimate` reconstructs `reference`.
+    """
+    ref = reference.astype(np.float64) - np.mean(reference)
+    est = estimate.astype(np.float64)  - np.mean(estimate)
+    alpha  = np.dot(est, ref) / (np.dot(ref, ref) + 1e-10)
+    target = alpha * ref
+    noise  = est - target
+    return float(10.0 * np.log10(
+        (np.dot(target, target) + 1e-10) / (np.dot(noise, noise) + 1e-10)
+    ))
+
+
+def _calc_speech_ratio(audio: np.ndarray, sr: int) -> float:
+    frame_len = max(1, int(sr * 0.030))
+    n_frames = len(audio) // frame_len
+    if n_frames == 0:
+        return 0.0
+    frame_rms = np.array([
+        np.sqrt(np.mean(audio[i * frame_len:(i + 1) * frame_len] ** 2))
+        for i in range(n_frames)
+    ])
+    noise_floor = float(np.percentile(frame_rms, 10)) + 1e-10
+    voiced_frames = frame_rms > noise_floor * 3.0
+    return float(np.sum(voiced_frames) / n_frames)
+
+
+def _calc_energy_consistency(audio: np.ndarray, sr: int) -> float:
+    frame_len = max(1, int(sr * 0.030))
+    n_frames = len(audio) // frame_len
+    if n_frames == 0:
+        return 1.0
+    frame_rms = np.array([
+        np.sqrt(np.mean(audio[i * frame_len:(i + 1) * frame_len] ** 2))
+        for i in range(n_frames)
+    ])
+    mean_rms = float(np.mean(frame_rms))
+    std_rms = float(np.std(frame_rms))
+    if mean_rms < 1e-5:
+        return 0.0
+    cv = std_rms / mean_rms
+    # Natural speech CV is typically between 0.3 and 1.2
+    if cv < 0.3:
+        return float(np.clip(cv / 0.3, 0.0, 1.0))
+    elif cv > 1.2:
+        return float(np.clip(1.0 - (cv - 1.2) / 1.0, 0.0, 1.0))
+    else:
+        return 1.0
+
+
+def _map_si_snr(db: float) -> float:
+    # SI-SNR: 0 dB or below -> 0.0, 10 dB or above -> 1.0
+    return float(np.clip((db - 0.0) / 10.0, 0.0, 1.0))
+
+
+def _map_overlap(overlap: float) -> float:
+    # Overlap penalty: overlap > 0.2 begins scaling down, overlap >= 0.8 is capped at 0.2
+    return float(np.clip(1.0 - (overlap - 0.2) * 1.333, 0.2, 1.0))
+
+
+def separation_quality_score(
+    audio: np.ndarray,
+    raw_mix: np.ndarray,
+    sr: int,
+    overlap: float,
+) -> dict:
+    """
+    Compute separation quality metric using speech ratio, energy consistency, SI-SNR, and overlap.
+    """
+    speech_rat = _calc_speech_ratio(audio, sr)
+    speech_ratio_score = float(np.clip(speech_rat / 0.25, 0.0, 1.0))
+
+    energy_const = _calc_energy_consistency(audio, sr)
+
+    db = si_snr(audio, raw_mix)
+    si_snr_score = _map_si_snr(db)
+
+    overlap_mult = _map_overlap(overlap)
+
+    quality_score = float(speech_ratio_score * energy_const * si_snr_score * overlap_mult)
+
+    return {
+        "quality_score":      round(quality_score, 4),
+        "speech_ratio":       round(speech_rat, 4),
+        "energy_consistency": round(energy_const, 4),
+        "si_snr_db":          round(db, 2),
+        "overlap":            round(overlap, 4),
+    }
+
+
+def identify_speakers(
+    saved_files: list,
+    out_dir: Path,
+    raw_mix: np.ndarray | None = None,
+    sr: int = 16000,
+    overlap: float = 0.0,
+) -> dict:
+    """
+    Batch-identify all speaker .wav files from a run_canary.py output session,
+    incorporating separation quality gating and score fusion.
 
     Parameters
     ----------
@@ -161,11 +260,17 @@ def identify_speakers(saved_files: list, out_dir: Path) -> dict:
         Filenames such as ["speaker_1.wav", "speaker_2.wav"] produced by the pipeline.
     out_dir     : Path
         Session output directory (e.g. outputs/20260611_214500/).
+    raw_mix     : np.ndarray | None
+        The original unseparated raw mixture. If provided, enables quality checks.
+    sr          : int
+        Sample rate (default 16000).
+    overlap     : float
+        Overlap probability from the scene detection/DRS.
 
     Returns
     -------
     dict[str, dict]
-        {filename: {"speaker": ..., "confidence": ..., "margin": ..., "scores": ..., "reason": ...}}
+        {filename: {"speaker": ..., "confidence": ..., "margin": ..., "scores": ..., "reason": ..., "separation_quality": ...}}
     """
     from voice_computation.matcher import _load_profiles
 
@@ -182,14 +287,103 @@ def identify_speakers(saved_files: list, out_dir: Path) -> dict:
                 "margin":     0.0,
                 "scores":     [],
                 "reason":     f"File not found: {wav_path}",
+                "separation_quality": 1.0,
             }
             continue
 
-        audio, sr = sf.read(str(wav_path), dtype="float32")
+        audio, file_sr = sf.read(str(wav_path), dtype="float32")
         if audio.ndim > 1:
             audio = audio.mean(axis=-1)
 
-        result        = identify(audio, sr, profiles=profiles)
+        # ── Pre-gating and quality estimation ─────────────────────────────────
+        quality_score = 1.0
+        q_info = {}
+        if raw_mix is not None:
+            q_info = separation_quality_score(audio, raw_mix, file_sr, overlap)
+            quality_score = q_info["quality_score"]
+
+            # Gate: Reject poor separation/low-quality streams when multiple speakers exist
+            if len(saved_files) > 1:
+                rms_val = np.sqrt(np.mean(audio.astype(np.float64) ** 2))
+                rms_db = 20.0 * np.log10(rms_val + 1e-10)
+
+                if q_info["speech_ratio"] < 0.25:
+                    results[fname] = {
+                        "speaker":    "UNKNOWN",
+                        "confidence": 0.0,
+                        "margin":     0.0,
+                        "scores":     [],
+                        "reason":     f"poor separation (speech ratio {q_info['speech_ratio']:.2%}-VAD < 25%)",
+                        "separation_quality": quality_score,
+                        "quality_details": q_info,
+                    }
+                    continue
+                if q_info["si_snr_db"] < 2.0:
+                    results[fname] = {
+                        "speaker":    "UNKNOWN",
+                        "confidence": 0.0,
+                        "margin":     0.0,
+                        "scores":     [],
+                        "reason":     f"poor separation (SI-SNR {q_info['si_snr_db']:.1f} dB < 2.0 dB)",
+                        "separation_quality": quality_score,
+                        "quality_details": q_info,
+                    }
+                    continue
+                if rms_db < -45.0:
+                    results[fname] = {
+                        "speaker":    "UNKNOWN",
+                        "confidence": 0.0,
+                        "margin":     0.0,
+                        "scores":     [],
+                        "reason":     f"poor separation (RMS level {rms_db:.1f} dBFS is too low)",
+                        "separation_quality": quality_score,
+                        "quality_details": q_info,
+                    }
+                    continue
+
+        # ── Voice Matcher ─────────────────────────────────────────────────────
+        result = identify(audio, file_sr, profiles=profiles)
+
+        # ── Score Fusion / Quality Scaling ────────────────────────────────────
+        if raw_mix is not None:
+            original_confidence = result["confidence"]
+            scaled_confidence = original_confidence * quality_score
+
+            scaled_scores = []
+            for name, score in result.get("scores", []):
+                scaled_scores.append((name, round(score * quality_score, 4)))
+
+            result["confidence"] = round(scaled_confidence, 4)
+            result["scores"] = scaled_scores
+
+            # Re-evaluate top decision under scaled values
+            top_name = result["speaker"]
+            if top_name != "UNKNOWN":
+                second_score = scaled_scores[1][1] if len(scaled_scores) > 1 else 0.0
+                margin = scaled_confidence - second_score
+                result["margin"] = round(margin, 4)
+
+                if scaled_confidence < MIN_CONFIDENCE:
+                    result["speaker"] = "UNKNOWN"
+                    result["reason"] = f"Top scaled score {scaled_confidence:.3f} < minimum confidence {MIN_CONFIDENCE}."
+                elif len(scaled_scores) > 1 and margin < MARGIN_THRESHOLD:
+                    result["speaker"] = "UNKNOWN"
+                    result["reason"] = (
+                        f"Scaled margin {margin:.3f} < threshold {MARGIN_THRESHOLD}. "
+                        f"Top: {top_name}={scaled_confidence:.3f}, "
+                        f"2nd: {scaled_scores[1][0]}={second_score:.3f}."
+                    )
+                else:
+                    result["reason"] = (
+                        f"Accepted with separation quality. Score={scaled_confidence:.3f}, margin={margin:.3f} "
+                        f"(threshold={MARGIN_THRESHOLD}), Quality={quality_score:.2f}."
+                    )
+
+            result["separation_quality"] = quality_score
+            result["quality_details"] = q_info
+        else:
+            result["separation_quality"] = 1.0
+
         results[fname] = result
 
     return results
@@ -207,9 +401,10 @@ def print_result(fname: str, result: dict, scores_detail: dict | None = None) ->
     spk  = result["speaker"]
     conf = result["confidence"]
     margin = result["margin"]
+    sep_q = result.get("separation_quality", 1.0)
 
     icon = "✓" if spk != "UNKNOWN" else "✗"
-    print(f"  {icon}  {fname:<18}  →  {spk:<12}  conf: {conf:.2f}  margin: {margin:.2f}")
+    print(f"  {icon}  {fname:<18}  →  {spk:<12}  conf: {conf:.2f}  margin: {margin:.2f}  sep_quality: {sep_q:.2f}")
 
     if spk == "UNKNOWN":
         print(f"       reason: {result['reason']}")

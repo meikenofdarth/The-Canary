@@ -229,6 +229,34 @@ def _light_denoise_for_sep(audio, sr):
     return sig.astype(np.float32)
 
 
+def _apply_vad_gate(audio: np.ndarray, sr: int, frame_ms: int = 30) -> np.ndarray:
+    """
+    Zero out non-speech regions in the audio to prevent background noise
+    and artifacts from contaminating the separation model.
+    """
+    frame_len = max(1, int(sr * frame_ms / 1000))
+    n_frames = len(audio) // frame_len
+    if n_frames == 0:
+        return audio.copy()
+
+    # Calculate RMS for each frame
+    rms_frames = np.array([
+        np.sqrt(np.mean(audio[i * frame_len:(i + 1) * frame_len] ** 2))
+        for i in range(n_frames)
+    ])
+    # Noise floor = 10th percentile
+    noise_floor = float(np.percentile(rms_frames, 10)) + 1e-10
+    # Slightly sensitive threshold to preserve weak/onset speech components
+    voiced_frames = rms_frames > noise_floor * 2.5
+
+    gated_audio = audio.copy()
+    for i, is_voiced in enumerate(voiced_frames):
+        if not is_voiced:
+            gated_audio[i * frame_len:(i + 1) * frame_len] = 0.0
+
+    return gated_audio
+
+
 def _run_sepformer(audio, sr, n_mix: int = 2):
     """
     Run SepFormer-libri{n_mix}mix.
@@ -240,8 +268,12 @@ def _run_sepformer(audio, sr, n_mix: int = 2):
 
     model_id = f"sepformer-libri{n_mix}mix"
     MODEL_SR  = 8000
+
+    # VAD before separation: run only on speech regions to reduce artifacts/bleeding
+    audio_gated = _apply_vad_gate(audio, sr)
+
     audio_8k  = torchaudio.functional.resample(
-        torch.from_numpy(audio).unsqueeze(0), sr, MODEL_SR)
+        torch.from_numpy(audio_gated).unsqueeze(0), sr, MODEL_SR)
 
     from speechbrain.inference.separation import SepformerSeparation
     with warnings.catch_warnings():
@@ -576,18 +608,34 @@ def main():
         out_dir.rmdir()   # clean up the empty folder
         return
 
-    # Detect speaker count (always uses libri2mix)
-    print("● Detecting speakers ...")
-    n_spk, streams = detect_and_separate(raw, sr)
+    # Estimate speaker count using the windowed speaker count estimator
+    print("● Estimating speaker count ...")
+    try:
+        sys.path.insert(0, str(Path(__file__).parent / "separation-filtering"))
+        from speaker_counter import SpeakerCountEstimator
+        estimator = SpeakerCountEstimator(sample_rate=sr, max_speakers=3)
+        est_spk = estimator.estimate(raw)
+        print(f"  Estimated speakers in scene: {est_spk}")
+    except Exception as e:
+        print(f"  [SpeakerCountEstimator] failed: {e}. Defaulting to 2-speaker detection.")
+        est_spk = 2
+
+    print("● Separating speaker streams ...")
+    if est_spk >= 3:
+        n_spk, streams = detect_and_separate_3spk(raw, sr)
+    else:
+        n_spk, streams = detect_and_separate(raw, sr)
 
     # ── Cross-talk reduction + rank by speech content (dominant → first) ──
     # This ensures speaker_1.wav is always the main/loudest speaker,
     # and reduces SepFormer bleed-through before enhancement.
+    overlap_prob = 0.0
     if n_spk >= 2 and len(streams) >= 2:
         streams = _reduce_crosstalk(streams)
         streams = sorted(streams,
                          key=lambda s: _speech_band_rms(s, sr), reverse=True)
         print("  (cross-talk reduced · dominant speaker → speaker_1)")
+        overlap_prob = _temporal_overlap(streams[0], streams[1], sr)
 
     # ── Si-SNR vs raw mix ─────────────────────────────────────────────────
     if n_spk >= 2 and len(streams) >= 2:
@@ -652,7 +700,7 @@ def main():
     try:
         from voice_computation.ranker import identify_speakers, print_result
         print("\n● Identifying speakers ...")
-        voice_ids = identify_speakers(saved, out_dir)
+        voice_ids = identify_speakers(saved, out_dir, raw_mix=raw, sr=sr, overlap=overlap_prob)
         print()
         print("  " + "─" * 46)
         print("  VOICE IDENTITY")

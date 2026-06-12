@@ -1,0 +1,8 @@
+[Language: en]
+[Status: ✓  READY — meaningful speech detected]
+[RMS: -24.9 dBFS | Speech ratio: 49%]
+
+Hi, Canary. How are you? I am Him. Don't listen to him.
+
+--- Segments ---
+[0.00s → 7.00s] Hi, Canary. How are you? I am Him. Don't listen to him.

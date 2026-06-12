@@ -1,8 +1,0 @@
-[Language: en]
-[Status: ✓  READY — meaningful speech detected]
-[RMS: -25.9 dBFS | Speech ratio: 62%]
-
-Hi Canary, can you play me some arijith sing music? I want to listen to it.
-
---- Segments ---
-[0.00s → 7.00s] Hi Canary, can you play me some arijith sing music? I want to listen to it.

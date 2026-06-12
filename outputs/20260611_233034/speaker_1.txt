@@ -1,0 +1,8 @@
+[Language: en]
+[Status: ✓  READY — meaningful speech detected]
+[RMS: -21.3 dBFS | Speech ratio: 67%]
+
+Canary my day, my day was so bad, I am tired, I couldn't even go to the gym, it was...
+
+--- Segments ---
+[0.00s → 7.00s] Canary my day, my day was so bad, I am tired, I couldn't even go to the gym, it was...

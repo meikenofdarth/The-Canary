@@ -1,8 +1,0 @@
-[Language: en]
-[Status: ✓  READY — meaningful speech detected]
-[RMS: -20.9 dBFS | Speech ratio: 61%]
-
-Hi Canary, how are you? How was your day? Can you play me some songs please? Thank you.
-
---- Segments ---
-[0.00s → 6.00s] Hi Canary, how are you? How was your day? Can you play me some songs please? Thank you.
