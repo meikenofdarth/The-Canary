@@ -26,7 +26,7 @@ def get_latest_response():
     return max(contexts, key=lambda p: p.stat().st_mtime)
 
 def watch():
-    print("👀 Watching outputs/ directory for new voice commands...")
+    print("[Watcher] Watching outputs/ directory for new voice commands...")
     last_processed_file = None
     last_processed_mtime = 0
     
@@ -40,7 +40,7 @@ def watch():
                 # Wait a tiny bit just to ensure Hemang's code finished writing to it
                 time.sleep(0.5)
                 
-                print(f"\n🚀 New command detected: {latest_file}")
+                print(f"\n[Watcher] New command detected: {latest_file}")
                 try:
                     with open(latest_file, "r") as f:
                         payload = json.load(f)

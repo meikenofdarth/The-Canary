@@ -12,8 +12,8 @@ import tempfile
 from .tts import speak, play_audio_file
 
 def get_weather(location: str = "Bengaluru") -> dict:
-    """Fetch current weather from wttr.in"""
-    print(f"    [Weather] 🌤️ Fetching weather for {location}...")
+    """Fetch weather for a location from wttr.in"""
+    print(f"    [Weather] Fetching weather for {location}...")
     try:
         url = f"https://wttr.in/{location}?format=j1"
         r = requests.get(url, timeout=5)
@@ -48,7 +48,7 @@ def get_fuzzy_location(loc: str) -> str:
 
 def get_news(location: str = "Bengaluru") -> dict:
     """Fetch latest top headline from Google News RSS for the location"""
-    print(f"    [News] 📰 Fetching news for {location}...")
+    print(f"    [News] Fetching news for {location}...")
     try:
         safe_location = urllib.parse.quote(location)
         url = f"https://news.google.com/rss/search?q={safe_location}"
@@ -70,7 +70,7 @@ def get_news(location: str = "Bengaluru") -> dict:
 
 def play_media(query: str, fallback_query: str = "Pop") -> dict:
     """Fetch a song metadata from iTunes API and play a cross-platform MP3."""
-    print(f"    [Media] 🎵 Searching for: {query}...")
+    print(f"    [Media] Searching for: {query}...")
     
     def search_itunes(search_term):
         try:
@@ -177,6 +177,6 @@ def execute_intent(domain: str, transcript: str, profile: dict = None, entities:
     else:
         # Fallback if we don't understand
         msg = f"I'm sorry, I don't know how to handle the {domain} request yet."
-        print(f"    [Agent] ❓ {msg}")
+        print(f"    [Agent] {msg}")
         speak(msg)
         return {"status": "ignored", "message": "No matching API"}

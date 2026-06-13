@@ -19,7 +19,7 @@ def speak(text: str, lang: str = 'en'):
     if not text:
         return
         
-    print(f"    [TTS] 🗣️  Speaking: '{text}'")
+    print(f"    [TTS] Speaking: '{text}'")
     
     # Generate speech
     tts = gTTS(text=text, lang=lang)
