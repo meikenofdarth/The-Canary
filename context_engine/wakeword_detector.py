@@ -159,20 +159,25 @@ _CANARY_FUZZY_MAP: dict[str, float] = {
 # ─────────────────────────────────────────────────────────────────────────────
 #  CUSTOM CONFIG LOADER
 #  Reads wakeword/wakeword_config.json written by change_wakeword.py.
-#  Returns None if no custom config exists (→ Canary defaults used).
+#  Falls back to default_wakeword_config.json in the root directory.
 # ─────────────────────────────────────────────────────────────────────────────
 _CONFIG_PATH   = Path(__file__).parent.parent / "wakeword" / "wakeword_config.json"
+_DEFAULT_PATH  = Path(__file__).parent.parent / "default_wakeword_config.json"
 _BINARY_PATH   = Path(__file__).parent.parent / "wakeword" / "build" / "wakeword_matcher"
 
 def _load_custom_config() -> dict | None:
-    """Load wakeword_config.json if it exists and is not set to 'canary'."""
-    if not _CONFIG_PATH.exists():
+    """
+    Load wakeword_config.json from the custom path if it exists.
+    Otherwise, fall back to default_wakeword_config.json in the root directory.
+    """
+    path = _CONFIG_PATH if _CONFIG_PATH.exists() else _DEFAULT_PATH
+    if not path.exists():
         return None
     try:
-        cfg = json.loads(_CONFIG_PATH.read_text(encoding="utf-8"))
+        cfg = json.loads(path.read_text(encoding="utf-8"))
         word = cfg.get("word", "").strip().lower()
-        if not word or word == "canary":
-            return None           # Canary config → use hardcoded defaults
+        if not word:
+            return None
         return cfg
     except Exception:
         return None
@@ -203,7 +208,7 @@ if _custom_cfg:
     _ACTIVE_WAKEWORDS: list[str]   = _build_custom_wakewords(_ACTIVE_WORD)
     _ACTIVE_FUZZY:     dict[str, float] = _custom_cfg.get("lookup_table", {})
     _ACTIVE_THRESHOLD: float       = float(_custom_cfg.get("threshold", 0.75))
-    _IS_CANARY:        bool        = False
+    _IS_CANARY:        bool        = (_ACTIVE_WORD == "canary")
 else:
     _ACTIVE_WORD      = "canary"
     _ACTIVE_WAKEWORDS = _CANARY_WAKEWORDS

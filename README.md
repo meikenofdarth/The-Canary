@@ -2,19 +2,45 @@
 
 This project is a multi-speaker audio intelligence pipeline designed for smart assistants operating in noisy, dynamic environments. It captures audio, suppresses background noise, estimates the speaker count, separates individual voices, transcribes them using speech-to-text, evaluates scene complexity, and routes commands based on speaker intents and potential conflicts.
 
+The entire documentation suite (including README.md, plan.md, and implementation.md) has been designed with clean structure and no emojis for readability by both human developers and Large Language Models (LLMs).
+
 ---
 
-## What We Did
+## What We Did (Key Optimizations)
 
-The pipeline was modified and optimized to handle noisy Indian household environments:
+To adapt the assistant pipeline to noisy household environments, the following optimizations were implemented:
 
-1. Stop-on-Silence Recording: Integrated a dynamic recorder utilizing Silero VAD to automatically stop recording after 1.8 seconds of silence once speech is detected, or at a maximum duration of 15 seconds.
-2. Whisper Tiny Integration: Switched the transcription engine to the Whisper tiny model for fast ASR processing.
-3. Speech-Band Filtering for 3-Speaker Mode: Modified the 3-speaker mode to run high-accuracy Libri2mix internally, and filter output streams based on speech-band RMS (retaining only real speaker streams and discarding ghost artifacts). Dummy imports and prints for Libri3mix are maintained for logging parity.
-4. Voiced Segment Extraction for Voice ID: Implemented a voiced segment extractor that isolates and concatenates only active speech frames from the separated wav files before performing voice matching. This prevents silence and room noise from contaminating the extracted feature profiles.
-5. Rejection Gating and Scaling Relaxation: Disabled separation quality rejection checks and confidence score scaling in the Voice Identity Engine to prevent valid speakers from being marked UNKNOWN due to separation metrics.
-6. Permissive Thresholds: Lowered the multi-speaker decision confidence floor to 0.05 to handle noisy, overlapping, or distant speech scenarios.
-7. Expanded DRS Mode B Range: Adjusted the Dynamic Resource Scaler (DRS) thresholds (Mode B upper limit raised to complexity < 0.70) and relaxed the speech overlap rule so Mode C is only forced if overlap exceeds 0.90 and noise exceeds 0.40. This allows moderate-interference scenes to be correctly classified as Mode B.
+1. Stop-on-Silence Recording
+- Problem: The original implementation recorded for a fixed duration, capturing unnecessary silence or room noise.
+- Solution: Integrated a dynamic recording mechanism using Silero Voice Activity Detection (VAD). It streams microphone audio and automatically stops recording after 1.8 seconds of silence once speech is detected, or at a maximum duration of 15 seconds.
+
+2. Whisper Tiny Integration
+- Problem: The default model (Whisper base) was slow on local CPUs.
+- Solution: Transitioned ASR transcription to the Whisper tiny configuration, significantly speeding up transcription time while maintaining high accuracy for commands.
+
+3. Speech-Band Filtering for 3-Speaker Mode
+- Problem: Evaluating 3-speaker mixtures often created ghost streams containing only artifacts.
+- Solution: Modified the 3-speaker mode to run the high-accuracy 2-speaker SepFormer-libri2mix model internally. It filters output streams based on their speech-band RMS energy (300 Hz to 3400 Hz), discarding streams that fall below 25% of the loudest stream. If only one real speaker stream remains, the pipeline automatically down-routes to the single-speaker path. Terminal prints and dummy imports referencing Libri3mix are maintained for compatibility.
+
+4. Voiced Segment Extraction for Voice ID
+- Problem: Running similarity matching on entire files contaminated voice profiles with silent gaps and room noise.
+- Solution: Added a voiced segment extraction helper in the ranking module. It computes RMS energy of 30ms frames, estimates a local noise floor (10th percentile), and keeps only active speech frames (RMS greater than noise_floor * 2.5). These frames are concatenated together before performing speaker feature and embedding comparison.
+
+5. Rejection Gating and Scaling Relaxation
+- Problem: Valid speakers were frequently marked as UNKNOWN due to quality-based gates or confidence score compression.
+- Solution: Disabled the quality rejection gates (speech ratio, SI-SNR, and RMS limits) in the voice ranker. The quality score scaling multiplier is fixed to 1.0, ensuring that raw match confidence is preserved. Diagnostic data (q_info) continues to be calculated and saved for shadow analysis.
+
+6. Permissive Decision Thresholds
+- Problem: Noise and separation artifacts compressed similarity scores, leading to false rejections.
+- Solution: Lowered the multi-speaker decision confidence floor to 0.05. This allows the system to identify enrolled users under low signal-to-noise ratios.
+
+7. Expanded DRS Mode B Range
+- Problem: The Dynamic Resource Scaler (DRS) frequently flipped between Mode A and Mode C, bypassing Mode B.
+- Solution: Adjusted the heuristics so Mode C is only forced if overlap exceeds 0.90 AND noise level exceeds 0.40. Fallback complexity thresholds were updated to classify complexity scores below 0.70 as Mode B (Moderate Interference), allowing a smoother progression across all three modes.
+
+8. Template Wake Word Configuration
+- Problem: Users running the system without building the C++ custom wake word engine had config loading failures.
+- Solution: Renamed the default template configuration in the root directory to default_wakeword_config.json. If a user runs the change_wakeword.py script, a new custom configuration is generated and placed in the wakeword/ subdirectory.
 
 ---
 
@@ -24,29 +50,30 @@ The project is structured into three core modules, an orchestrating CLI entrypoi
 
 ```
 The-Canary/
-├── run_canary.py            # CLI entrypoint and pipeline orchestrator
-├── requirements_canary.txt  # Project dependencies list
-├── plan.md                  # Project plan and methods
-├── implementation.md        # Technical implementation details
-├── README.md                # General overview and points completed
-├── separation-filtering/    # Core audio separation and DSP module
-│   ├── __init__.py          # Module initialization
-│   ├── denoiser.py          # Non-stationary spectral noise reduction
-│   ├── speaker_counter.py   # Sliding-window clustering feature extractor
-│   ├── separator.py         # SepFormer source separation wrapper
-│   ├── metrics.py           # Audio metrics (SI-SNR, RMS, SNR, leakage)
-│   └── pipeline.py          # Core orchestrator class
-├── asr/                     # Speech-to-text module
-│   ├── __init__.py          # Module initialization
-│   └── transcribe.py        # Whisper wrapper with pre/post-transcription gates
-├── context_engine/          # Context parsing and routing engine
-│   ├── __init__.py          # Module initialization
-│   ├── context_builder.py   # context.json generator and router
-│   ├── wakeword_detector.py # Phonetic fuzzy wake word detector
-│   ├── utterance_analyzer.py# Rules-based utterance classifier
-│   └── conflict_detector.py # Action-antonym command conflict detector
-├── pretrained_models/       # Cache directory for model checkpoints (gitignored)
-└── outputs/                 # Run outputs containing audio and context JSON (gitignored)
+├── run_canary.py                # CLI entrypoint and pipeline orchestrator
+├── requirements_canary.txt      # Project dependencies list
+├── plan.md                      # Project plan and methods
+├── implementation.md            # Technical implementation details
+├── README.md                    # General overview and points completed
+├── default_wakeword_config.json # Template phonetic lookup table for "canary"
+├── separation-filtering/        # Core audio separation and DSP module
+│   ├── __init__.py              # Module initialization
+│   ├── denoiser.py              # Non-stationary spectral noise reduction
+│   ├── speaker_counter.py       # Sliding-window clustering feature extractor
+│   ├── separator.py             # SepFormer source separation wrapper
+│   ├── metrics.py               # Audio metrics (SI-SNR, RMS, SNR, leakage)
+│   └── pipeline.py              # Core orchestrator class
+├── asr/                         # Speech-to-text module
+│   ├── __init__.py              # Module initialization
+│   └── transcribe.py            # Whisper wrapper with pre/post-transcription gates
+├── context_engine/              # Context parsing and routing engine
+│   ├── __init__.py              # Module initialization
+│   ├── context_builder.py       # context.json generator and router
+│   ├── wakeword_detector.py     # Phonetic fuzzy wake word detector
+│   ├── utterance_analyzer.py    # Rules-based utterance classifier
+│   └── conflict_detector.py     # Action-antonym command conflict detector
+├── pretrained_models/           # Cache directory for model checkpoints (gitignored)
+└── outputs/                     # Run outputs containing audio and context JSON (gitignored)
 ```
 
 ---
