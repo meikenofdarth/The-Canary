@@ -1,0 +1,112 @@
+/* Import Inter font */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+@import "tailwindcss";
+
+/* Canary Design System */
+:root {
+  --canary-yellow: #FFD700;
+  --canary-gold: #FFC107;
+  --cream: #FFF8E7;
+  --warm-white: #FFFDF5;
+  --charcoal: #2D2D2D;
+  --soft-gray: #9CA3AF;
+  --feather-gold: #F5C842;
+  --nest-brown: #8B7355;
+  --warm-border: #F0E6D3;
+
+  --background: var(--cream);
+  --foreground: var(--charcoal);
+}
+
+
+*  {
+  box-sizing: border-box;
+  padding: 0;
+  margin: 0;
+}
+
+html,
+body {
+  max-width: 100vw;
+  overflow-x: hidden;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  background-color: var(--cream);
+  color: var(--charcoal);
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+/* Custom scrollbar for the conversation panel */
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--warm-border);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--nest-brown);
+}
+
+/* Markdown content styling inside canary messages */
+.canary-markdown p {
+  margin-bottom: 0.5em;
+}
+
+.canary-markdown p:last-child {
+  margin-bottom: 0;
+}
+
+.canary-markdown ul,
+.canary-markdown ol {
+  margin-left: 1.25em;
+  margin-bottom: 0.5em;
+}
+
+.canary-markdown li {
+  margin-bottom: 0.25em;
+}
+
+.canary-markdown code {
+  background: rgba(245, 200, 66, 0.15);
+  padding: 0.15em 0.35em;
+  border-radius: 4px;
+  font-size: 0.9em;
+}
+
+.canary-markdown pre {
+  background: #2D2D2D;
+  color: #FFF8E7;
+  padding: 0.75em 1em;
+  border-radius: 8px;
+  overflow-x: auto;
+  margin-bottom: 0.5em;
+}
+
+.canary-markdown strong {
+  font-weight: 600;
+}
+
+.canary-markdown h1,
+.canary-markdown h2,
+.canary-markdown h3 {
+  font-weight: 600;
+  margin-bottom: 0.25em;
+  margin-top: 0.5em;
+}
+
+/* Selection styling */
+::selection {
+  background: rgba(255, 215, 0, 0.3);
+  color: var(--charcoal);
+}
