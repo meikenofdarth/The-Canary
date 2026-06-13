@@ -1,9 +1,0 @@
-[Language: en]
-[Status: ✓  READY — meaningful speech detected]
-[RMS: -29.0 dBFS | Speech ratio: 77%]
-
-Hi can, hi Raju, how are you? Can you play me some good songs please?
-
---- Segments ---
-[0.00s → 4.56s] Hi can, hi Raju, how are you?
-[4.56s → 7.00s] Can you play me some good songs please?

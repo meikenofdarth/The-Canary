@@ -1,0 +1,8 @@
+[Language: en]
+[Status: ✓  READY — meaningful speech detected]
+[RMS: -27.1 dBFS | Speech ratio: 71%]
+
+Raju, can you play me some songs please?
+
+--- Segments ---
+[0.00s → 4.48s] Raju, can you play me some songs please?

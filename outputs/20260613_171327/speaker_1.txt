@@ -1,9 +1,0 @@
-[Language: hi]
-[Status: ✓  READY — meaningful speech detected]
-[RMS: -25.2 dBFS | Speech ratio: 55%]
-
-Kaneri, how is your day? Raju, play me some good songs.
-
---- Segments ---
-[0.00s → 2.74s] Kaneri, how is your day?
-[2.74s → 4.74s] Raju, play me some good songs.

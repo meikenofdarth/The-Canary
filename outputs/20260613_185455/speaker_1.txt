@@ -1,0 +1,8 @@
+[Language: en]
+[Status: ✓  READY — meaningful speech detected]
+[RMS: -23.1 dBFS | Speech ratio: 72%]
+
+Hello, can you please call from the render2 for me?
+
+--- Segments ---
+[0.00s → 6.00s] Hello, can you please call from the render2 for me?  [low confidence]

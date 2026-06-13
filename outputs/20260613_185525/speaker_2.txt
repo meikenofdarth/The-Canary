@@ -1,0 +1,8 @@
+[Language: en]
+[Status: ✓  READY — meaningful speech detected]
+[RMS: -29.2 dBFS | Speech ratio: 76%]
+
+Raju plays some songs from FIFA 15.
+
+--- Segments ---
+[0.00s → 10.00s] Raju plays some songs from FIFA 15.

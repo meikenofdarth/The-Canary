@@ -1,0 +1,109 @@
+{
+  "timestamp": "2026-06-13T18:55:49.186839",
+  "session_dir": "outputs/20260613_185525",
+  "drs_mode": "C",
+  "scene": {
+    "speaker_count": 2,
+    "complexity": 0.716,
+    "noise_level": 0.386,
+    "simul_speech": 1.0
+  },
+  "speakers": [
+    {
+      "id": "speaker_1",
+      "status": "READY",
+      "transcript": "Raju, can you play songs from the render to for me?",
+      "wakeword": true,
+      "wakeword_confidence": 1.0,
+      "wakeword_phrase": "raju",
+      "type": "COMMAND",
+      "type_confidence": 0.95,
+      "identity": "UNKNOWN",
+      "identity_confidence": 0.6392,
+      "known_user": false,
+      "start_time": 0.0,
+      "intent_result": {
+        "domain": "SONGS",
+        "polarity": "POSITIVE",
+        "confidence": 0.6,
+        "entities": {
+          "song_title_candidate": "songs from the render to"
+        },
+        "raw_signals": [
+          "play",
+          "songs"
+        ],
+        "original_text": "Raju, can you play songs from the render to for me?"
+      }
+    },
+    {
+      "id": "speaker_2",
+      "status": "READY",
+      "transcript": "Raju plays some songs from FIFA 15.",
+      "wakeword": true,
+      "wakeword_confidence": 1.0,
+      "wakeword_phrase": "raju",
+      "type": "COMMAND",
+      "type_confidence": 0.95,
+      "identity": "Hemang Seth",
+      "identity_confidence": 0.7852,
+      "known_user": true,
+      "start_time": 0.0,
+      "intent_result": {
+        "domain": "SONGS",
+        "polarity": "POSITIVE",
+        "confidence": 0.55,
+        "entities": {},
+        "raw_signals": [
+          "songs"
+        ],
+        "original_text": "Raju plays some songs from FIFA 15."
+      }
+    }
+  ],
+  "wakeword_count": 2,
+  "command_count": 2,
+  "conflict": true,
+  "conflict_pair": [
+    "play",
+    "end"
+  ],
+  "route": "EXECUTE",
+  "arbitration": {
+    "winner": "speaker_2",
+    "route": "EXECUTE",
+    "reason": "Hemang Seth issued the only wakeword command. Priority: 0.91.",
+    "speakers": [
+      {
+        "id": "speaker_1",
+        "identity": "UNKNOWN",
+        "identity_confidence": 0.0,
+        "known_user": false,
+        "wakeword": true,
+        "wakeword_confidence": 1.0,
+        "transcript": "Raju, can you play songs from the render to for me?",
+        "type": "COMMAND",
+        "separation_quality": 1.0,
+        "identity_note": "",
+        "start_time": 0.0,
+        "priority": 0.4,
+        "intent": "PLAY_MEDIA"
+      },
+      {
+        "id": "speaker_2",
+        "identity": "Hemang Seth",
+        "identity_confidence": 0.7852,
+        "known_user": true,
+        "wakeword": true,
+        "wakeword_confidence": 1.0,
+        "transcript": "Raju plays some songs from FIFA 15.",
+        "type": "COMMAND",
+        "separation_quality": 1.0,
+        "identity_note": "",
+        "start_time": 0.0,
+        "priority": 0.9141,
+        "intent": "PLAY_MEDIA"
+      }
+    ]
+  }
+}

@@ -1,0 +1,8 @@
+[Language: hi]
+[Status: ✓  READY — meaningful speech detected]
+[RMS: -28.2 dBFS | Speech ratio: 65%]
+
+No Raju play me some Ashichy 2 songs.
+
+--- Segments ---
+[0.00s → 7.00s] No Raju play me some Ashichy 2 songs.  [low confidence]

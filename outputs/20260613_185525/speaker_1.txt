@@ -1,0 +1,8 @@
+[Language: en]
+[Status: ✓  READY — meaningful speech detected]
+[RMS: -24.4 dBFS | Speech ratio: 76%]
+
+Raju, can you play songs from the render to for me?
+
+--- Segments ---
+[0.00s → 5.00s] Raju, can you play songs from the render to for me?
