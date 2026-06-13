@@ -38,7 +38,7 @@ def speak(text: str, lang: str = 'en'):
     except OSError:
         pass
 
-def play_audio_file(filepath: str, max_duration_sec: int = 10):
+def play_audio_file(filepath: str, max_duration_sec: int = 0):
     """Plays an audio file (MP3, WAV, OGG) using pygame mixer."""
     if not os.path.exists(filepath):
         print(f"    [Audio] Error: File not found {filepath}")
@@ -53,7 +53,7 @@ def play_audio_file(filepath: str, max_duration_sec: int = 10):
         # Block until playback finishes or max_duration is reached
         start_time = time.time()
         while pygame.mixer.music.get_busy():
-            if time.time() - start_time > max_duration_sec:
+            if max_duration_sec > 0 and (time.time() - start_time > max_duration_sec):
                 pygame.mixer.music.stop()
                 break
             pygame.time.Clock().tick(10)

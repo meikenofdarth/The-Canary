@@ -34,6 +34,17 @@ def get_weather(location: str = "Bengaluru") -> dict:
     return {"status": "error", "message": msg}
 
 import urllib.parse
+import difflib
+import re
+
+KNOWN_CITIES = [
+    "Bengaluru", "New York", "Delhi", "Hyderabad", "Himachal", 
+    "Mumbai", "Pune", "Chennai", "Kolkata", "London", "Tokyo"
+]
+
+def get_fuzzy_location(loc: str) -> str:
+    matches = difflib.get_close_matches(loc, KNOWN_CITIES, n=1, cutoff=0.6)
+    return matches[0] if matches else loc
 
 def get_news(location: str = "Bengaluru") -> dict:
     """Fetch latest top headline from Google News RSS for the location"""
@@ -100,7 +111,7 @@ def play_media(query: str, fallback_query: str = "Pop") -> dict:
         with open(audio_file, "wb") as f:
             f.write(audio_r.content)
             
-        play_audio_file(audio_file)
+        play_audio_file(audio_file, max_duration_sec=10)
         
         try:
             os.remove(audio_file)
@@ -120,8 +131,27 @@ def execute_intent(domain: str, transcript: str, profile: dict = None, entities:
     profile = profile or {}
     entities = entities or {}
     
+    location = entities.get("location")
+    
+    # Fallback 1: If acoustic engine didn't extract the entity, manually regex it from transcript
+    if not location:
+        # Match 'in New York', 'for Delhi', etc.
+        match = re.search(r"(?:in|for)\s+([A-Za-z\s]+)(?:\.|$)", transcript, re.IGNORECASE)
+        if match:
+            # Strip extra words that might have been caught
+            extracted = match.group(1).strip()
+            # Clean up trailing words like 'today' or 'now'
+            extracted = re.sub(r'\s*(today|now|please).*$', '', extracted, flags=re.IGNORECASE)
+            if extracted:
+                location = extracted
+
+    # Fallback 2: Fuzzy match to auto-correct ASR misspellings like "Himaqal" -> "Himachal"
+    if location:
+        location = get_fuzzy_location(location)
+        
     # Priority: 1. Spoken Entity Location -> 2. User Profile Location -> 3. Default "Bengaluru"
-    location = entities.get("location") or profile.get("location", "Bengaluru")
+    location = location or profile.get("location", "Bengaluru")
+    
     fav_music = profile.get("favorite_music_genre", "Pop")
     
     t = transcript.lower()
