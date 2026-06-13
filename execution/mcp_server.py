@@ -57,45 +57,57 @@ def get_news(location: str = "Bengaluru") -> dict:
     speak(msg)
     return {"status": "error", "message": msg}
 
-def play_media(query: str) -> dict:
+def play_media(query: str, fallback_query: str = "Pop") -> dict:
     """Fetch a song metadata from iTunes API and play a cross-platform MP3."""
     print(f"    [Media] 🎵 Searching for: {query}...")
-    try:
-        url = f"https://itunes.apple.com/search?term={query}&entity=song&limit=1"
-        r = requests.get(url, timeout=5)
-        if r.status_code == 200:
-            data = r.json()
-            if data.get("resultCount", 0) > 0:
-                track = data["results"][0]
-                track_name = track.get("trackName", "Unknown Song")
-                artist = track.get("artistName", "Unknown Artist")
-                
-                msg = f"Playing {track_name} by {artist}."
-                speak(msg)
-                
-                # iTunes provides .m4a which pygame cannot play cross-platform.
-                # So we download a reliable public domain MP3 for the audio demo.
-                demo_mp3_url = "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3"
-                
-                temp_dir = tempfile.gettempdir()
-                audio_file = os.path.join(temp_dir, "canary_preview.mp3")
-                
-                print(f"    [Media] Downloading MP3 audio stream...")
-                audio_r = requests.get(demo_mp3_url, timeout=10)
-                with open(audio_file, "wb") as f:
-                    f.write(audio_r.content)
-                    
-                play_audio_file(audio_file)
-                
-                # Cleanup
-                try:
-                    os.remove(audio_file)
-                except OSError:
-                    pass
-                    
-                return {"status": "success", "message": msg}
-    except Exception as e:
-        print(f"    [Media] API Error: {e}")
+    
+    def search_itunes(search_term):
+        try:
+            url = f"https://itunes.apple.com/search?term={search_term}&entity=song&limit=1"
+            r = requests.get(url, timeout=5)
+            if r.status_code == 200:
+                data = r.json()
+                if data.get("resultCount", 0) > 0:
+                    return data["results"][0]
+        except Exception as e:
+            print(f"    [Media] API Error: {e}")
+        return None
+
+    # First attempt with the parsed query
+    track = search_itunes(query)
+    
+    # If it failed (e.g. transcript was messy like "raju s fifa 15"), fallback to their favorite genre!
+    if not track:
+        print(f"    [Media] Could not find '{query}'. Falling back to favorite genre: {fallback_query}...")
+        track = search_itunes(fallback_query)
+        
+    if track:
+        track_name = track.get("trackName", "Unknown Song")
+        artist = track.get("artistName", "Unknown Artist")
+        
+        msg = f"Playing {track_name} by {artist}."
+        speak(msg)
+        
+        # iTunes provides .m4a which pygame cannot play cross-platform.
+        # So we download a reliable public domain MP3 for the audio demo.
+        demo_mp3_url = "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3"
+        
+        temp_dir = tempfile.gettempdir()
+        audio_file = os.path.join(temp_dir, "canary_preview.mp3")
+        
+        print(f"    [Media] Downloading MP3 audio stream...")
+        audio_r = requests.get(demo_mp3_url, timeout=10)
+        with open(audio_file, "wb") as f:
+            f.write(audio_r.content)
+            
+        play_audio_file(audio_file)
+        
+        try:
+            os.remove(audio_file)
+        except OSError:
+            pass
+            
+        return {"status": "success", "message": msg}
         
     msg = f"Sorry, I couldn't find or play any music for {query}."
     speak(msg)
@@ -127,7 +139,7 @@ def execute_intent(domain: str, transcript: str, profile: dict = None) -> dict:
             if not query:
                 query = fav_music
                 
-        return play_media(query=query)
+        return play_media(query=query, fallback_query=fav_music)
         
     else:
         # Fallback if we don't understand
