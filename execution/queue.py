@@ -69,10 +69,11 @@ def process_arbitration(response_payload: dict):
         domain = active_command.get("domain", "UNKNOWN")
         text = active_command.get("transcript", "")
         entities = active_command.get("entities", {})
+        polarity = active_command.get("polarity", "POSITIVE")
         
         print(f"  [Queue] Single Execution for {spk_id}")
         profile = profiles.get(identity) if active_command.get("known_user") else None
-        execute_intent(domain, text, profile, entities)
+        execute_intent(domain, text, profile, entities, polarity)
         
     elif route == "SEQUENTIAL":
         print(f"  [Queue] Sequential Execution for {len(sequential_queue)} commands")
@@ -82,9 +83,10 @@ def process_arbitration(response_payload: dict):
             domain = cmd.get("domain", "UNKNOWN")
             text = cmd.get("transcript", "")
             entities = cmd.get("entities", {})
+            polarity = cmd.get("polarity", "POSITIVE")
             
             print(f"  --- Executing for {spk_id} ---")
             profile = profiles.get(identity) if cmd.get("known_user") else None
-            execute_intent(domain, text, profile, entities)
+            execute_intent(domain, text, profile, entities, polarity)
             
     print("  ─────────────────────────────────────────────\n")

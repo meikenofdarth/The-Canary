@@ -1,79 +1,76 @@
-import json
 import sys
 from pathlib import Path
 
 # Add project root to sys.path
 sys.path.insert(0, str(Path(__file__).parent))
 
+import execution.queue
+executed_calls = []
+
+def mock_execute_intent(domain, transcript, profile, entities, polarity="POSITIVE"):
+    executed_calls.append((domain, transcript, profile, entities, polarity))
+
+# Replace real execute_intent with mock
+execution.queue.execute_intent = mock_execute_intent
+
 from execution.queue import process_arbitration
-import io
-import contextlib
 
 def test_single_execute():
+    global executed_calls
+    executed_calls = []
+    
     payload = {
         "route": "EXECUTE",
-        "arbitration": {
-            "winner": "speaker_2",
-            "speakers": [
-                {
-                    "id": "speaker_1",
-                    "intent": "GREETING",
-                    "transcript": "Hello there.",
-                    "wakeword": False,
-                    "type": "UNKNOWN"
-                },
-                {
-                    "id": "speaker_2",
-                    "intent": "DEVICE_ON",
-                    "transcript": "Turn on the lights please.",
-                    "wakeword": True,
-                    "type": "COMMAND"
-                }
-            ]
+        "active_command": {
+            "speaker_id": "speaker_2",
+            "identity": "Hemang Seth",
+            "known_user": True,
+            "transcript": "Raju stop playing the music.",
+            "domain": "SONGS",
+            "polarity": "NEGATIVE",
+            "entities": {}
         }
     }
     
-    # Capture stdout to verify
-    f = io.StringIO()
-    with contextlib.redirect_stdout(f):
-        process_arbitration(payload)
-    output = f.getvalue()
+    process_arbitration(payload)
     
-    assert "Single Execution for speaker_2" in output
-    assert "Executing: Turn lights ON" in output
+    assert len(executed_calls) == 1
+    assert executed_calls[0] == ("SONGS", "Raju stop playing the music.", {"location": "New York", "favorite_music_genre": "Rock"}, {}, "NEGATIVE")
     print("✓ test_single_execute passed")
 
 def test_sequential_execute():
+    global executed_calls
+    executed_calls = []
+    
     payload = {
         "route": "SEQUENTIAL",
-        "arbitration": {
-            "speakers": [
-                {
-                    "id": "speaker_1",
-                    "intent": "DEVICE_ON",
-                    "transcript": "Turn on the TV.",
-                    "wakeword": True,
-                    "type": "COMMAND"
-                },
-                {
-                    "id": "speaker_2",
-                    "intent": "PLAY_MEDIA",
-                    "transcript": "Play some jazz music.",
-                    "wakeword": True,
-                    "type": "COMMAND"
-                }
-            ]
-        }
+        "sequential_queue": [
+            {
+                "speaker_id": "speaker_1",
+                "identity": "Sanchit",
+                "known_user": True,
+                "transcript": "Raju, tell me the weather in Luxembourg.",
+                "domain": "WEATHER",
+                "polarity": "POSITIVE",
+                "entities": {"location": "Luxembourg"}
+            },
+            {
+                "speaker_id": "speaker_2",
+                "identity": "Hemang Seth",
+                "known_user": True,
+                "transcript": "Raju stop playing the music.",
+                "domain": "SONGS",
+                "polarity": "NEGATIVE",
+                "entities": {}
+            }
+        ]
     }
     
-    f = io.StringIO()
-    with contextlib.redirect_stdout(f):
-        process_arbitration(payload)
-    output = f.getvalue()
+    process_arbitration(payload)
     
-    assert "Sequential Execution for 2 commands" in output
-    assert "Executing: Turn TV ON" in output
-    assert "Executing: Playing music (Play some jazz music.)" in output
+    assert len(executed_calls) == 2
+    assert executed_calls[0] == ("WEATHER", "Raju, tell me the weather in Luxembourg.", {"location": "Bengaluru", "favorite_music_genre": "Jazz"}, {"location": "Luxembourg"}, "POSITIVE")
+    assert executed_calls[1] == ("SONGS", "Raju stop playing the music.", {"location": "New York", "favorite_music_genre": "Rock"}, {}, "NEGATIVE")
     print("✓ test_sequential_execute passed")
 
 if __name__ == "__main__":

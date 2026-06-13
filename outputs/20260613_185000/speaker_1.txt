@@ -1,8 +1,0 @@
-[Language: hi]
-[Status: ✓  READY — meaningful speech detected]
-[RMS: -24.2 dBFS | Speech ratio: 78%]
-
-Raju, play me turn there two songs.
-
---- Segments ---
-[0.00s → 2.74s] Raju, play me turn there two songs.

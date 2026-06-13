@@ -41,3 +41,6 @@ torch>=2.0.0
 #    - Linux (Ubuntu/Debian): sudo apt-get install portaudio19-dev
 #    - Windows: PortAudio is usually packaged with the wheel, but if not, check sounddevice docs.
 
+gtts
+pygame
+feedparser

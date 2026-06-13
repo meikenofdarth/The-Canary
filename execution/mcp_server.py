@@ -124,7 +124,24 @@ def play_media(query: str, fallback_query: str = "Pop") -> dict:
     speak(msg)
     return {"status": "error", "message": msg}
 
-def execute_intent(domain: str, transcript: str, profile: dict = None, entities: dict = None) -> dict:
+def stop_media() -> dict:
+    """Stop any currently playing audio in pygame mixer."""
+    print("    [Media] Stopping playback...")
+    try:
+        import pygame
+        if pygame.mixer.get_init():
+            pygame.mixer.music.stop()
+            msg = "Stopping music playback."
+            speak(msg)
+            return {"status": "success", "message": msg}
+    except Exception as e:
+        print(f"    [Media] Error stopping playback: {e}")
+        
+    msg = "No music is currently playing."
+    speak(msg)
+    return {"status": "error", "message": msg}
+
+def execute_intent(domain: str, transcript: str, profile: dict = None, entities: dict = None, polarity: str = "POSITIVE") -> dict:
     """
     Given a domain, transcript, user profile, and extracted entities, invoke the appropriate API tool.
     """
@@ -136,7 +153,7 @@ def execute_intent(domain: str, transcript: str, profile: dict = None, entities:
     # Fallback 1: If acoustic engine didn't extract the entity, manually regex it from transcript
     if not location:
         # Match 'in New York', 'for Delhi', etc.
-        match = re.search(r"(?:in|for)\s+([A-Za-z\s]+)(?:\.|$)", transcript, re.IGNORECASE)
+        match = re.search(r"(?:in|for|about)\s+([A-Za-z\s]+)(?:\.|$)", transcript, re.IGNORECASE)
         if match:
             # Strip extra words that might have been caught
             extracted = match.group(1).strip()
@@ -163,6 +180,8 @@ def execute_intent(domain: str, transcript: str, profile: dict = None, entities:
         return get_news(location=location)
         
     elif domain == "SONGS":
+        if polarity == "NEGATIVE":
+            return stop_media()
         # If they just said "play some music", use their favorite genre!
         if "some music" in t or "a song" in t:
             query = fav_music

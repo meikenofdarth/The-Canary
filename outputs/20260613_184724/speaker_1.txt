@@ -1,8 +1,0 @@
-[Language: hi]
-[Status: ✓  READY — meaningful speech detected]
-[RMS: -24.5 dBFS | Speech ratio: 64%]
-
-Raju, flame is thunder to songs.
-
---- Segments ---
-[0.00s → 4.00s] Raju, flame is thunder to songs.  [low confidence]

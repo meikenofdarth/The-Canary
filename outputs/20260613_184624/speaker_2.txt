@@ -1,8 +1,0 @@
-[Language: bn]
-[Status: ✓  READY — meaningful speech detected]
-[RMS: -26.5 dBFS | Speech ratio: 73%]
-
-No Raju, claim me some ashekki do som.
-
---- Segments ---
-[0.00s → 8.00s] No Raju, claim me some ashekki do som.  [low confidence]
