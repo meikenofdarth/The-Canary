@@ -100,7 +100,11 @@ def test_conflict():
     process_arbitration(payload)
 
 if __name__ == "__main__":
+    import time
     test_weather()
+    time.sleep(2)
     test_news()
+    time.sleep(2)
     test_music()
+    time.sleep(2)
     test_conflict()
