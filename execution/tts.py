@@ -57,5 +57,10 @@ def play_audio_file(filepath: str, max_duration_sec: int = 0):
                 pygame.mixer.music.stop()
                 break
             pygame.time.Clock().tick(10)
+            
+        # Pygame mixer has a known bug where it stops slightly before the audio buffer is fully flushed.
+        # Adding a 1 second sleep ensures the final words of the TTS are completely spoken out!
+        time.sleep(1)
+        
     except Exception as e:
         print(f"    [Audio] Error playing {filepath}: {e}")
