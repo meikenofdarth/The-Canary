@@ -1,0 +1,10 @@
+{
+  "Sanchit": {
+    "location": "Bengaluru",
+    "favorite_music_genre": "Jazz"
+  },
+  "Hemang Seth": {
+    "location": "New York",
+    "favorite_music_genre": "Rock"
+  }
+}

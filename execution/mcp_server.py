@@ -1,64 +1,136 @@
 """
 execution/mcp_server.py
 ========================
-Mock MCP (Model Context Protocol) Server.
-Contains minimally working simulated SmartHome tools for execution.
+MCP Server that makes actual public API calls for Weather, News, and Music,
+and uses cross-platform Text-to-Speech to read out the results.
 """
 
-def control_smart_home(device: str, state: str) -> dict:
-    """Mock tool to control smart home devices."""
-    print(f"    [SmartHome] ⚙️ Executing: Turn {device} {state}")
-    return {"status": "success", "message": f"{device} turned {state}"}
+import os
+import requests
+import feedparser
+import tempfile
+from .tts import speak, play_audio_file
 
-def play_media(media_type: str, query: str = "") -> dict:
-    """Mock tool to play media."""
-    action = f"Playing {media_type}"
-    if query:
-        action += f" ({query})"
-    print(f"    [Media] 🎵 Executing: {action}")
-    return {"status": "success", "message": action}
+def get_weather(location: str = "Bengaluru") -> dict:
+    """Fetch current weather from wttr.in"""
+    print(f"    [Weather] 🌤️ Fetching weather for {location}...")
+    try:
+        url = f"https://wttr.in/{location}?format=j1"
+        r = requests.get(url, timeout=5)
+        if r.status_code == 200:
+            data = r.json()
+            cc = data.get("current_condition", [{}])[0]
+            temp = cc.get("temp_C", "unknown")
+            desc = cc.get("weatherDesc", [{}])[0].get("value", "")
+            
+            msg = f"The current weather in {location} is {temp} degrees Celsius and {desc}."
+            speak(msg)
+            return {"status": "success", "message": msg}
+    except Exception as e:
+        print(f"    [Weather] API Error: {e}")
+        
+    msg = f"Sorry, I couldn't fetch the weather for {location} right now."
+    speak(msg)
+    return {"status": "error", "message": msg}
 
-def stop_media() -> dict:
-    """Mock tool to stop media."""
-    print(f"    [Media] ⏹️ Executing: Stopping all media playback")
-    return {"status": "success", "message": "Media stopped"}
+import urllib.parse
 
-def get_weather(location: str = "current location") -> dict:
-    """Mock tool to get weather."""
-    print(f"    [Weather] 🌤️ Executing: Fetching weather for {location}")
-    return {"status": "success", "message": f"Weather in {location}: 72°F and sunny"}
+def get_news(location: str = "Bengaluru") -> dict:
+    """Fetch latest top headline from Google News RSS for the location"""
+    print(f"    [News] 📰 Fetching news for {location}...")
+    try:
+        safe_location = urllib.parse.quote(location)
+        url = f"https://news.google.com/rss/search?q={safe_location}"
+        feed = feedparser.parse(url)
+        if feed.entries:
+            # Get the top headline
+            top_title = feed.entries[0].title
+            # Google news often appends " - Publisher Name" at the end, let's keep it simple
+            clean_title = top_title.rsplit(" - ", 1)[0]
+            msg = f"Here is the latest news for {location}: {clean_title}."
+            speak(msg)
+            return {"status": "success", "message": msg}
+    except Exception as e:
+        print(f"    [News] API Error: {e}")
+        
+    msg = f"Sorry, I couldn't fetch the news for {location} right now."
+    speak(msg)
+    return {"status": "error", "message": msg}
 
-# Registry mapping intents (from context_engine) to tools
-INTENT_TOOL_MAP = {
-    "DEVICE_ON": (control_smart_home, {"state": "ON"}),
-    "DEVICE_OFF": (control_smart_home, {"state": "OFF"}),
-    "PLAY_MEDIA": (play_media, {"media_type": "music"}),
-    "STOP_MEDIA": (stop_media, {}),
-    "WEATHER": (get_weather, {}),
-}
+def play_media(query: str) -> dict:
+    """Fetch a song preview from iTunes API and play it."""
+    print(f"    [Media] 🎵 Searching for: {query}...")
+    try:
+        url = f"https://itunes.apple.com/search?term={query}&entity=song&limit=1"
+        r = requests.get(url, timeout=5)
+        if r.status_code == 200:
+            data = r.json()
+            if data.get("resultCount", 0) > 0:
+                track = data["results"][0]
+                preview_url = track.get("previewUrl")
+                track_name = track.get("trackName", "Unknown Song")
+                artist = track.get("artistName", "Unknown Artist")
+                
+                msg = f"Playing {track_name} by {artist}."
+                speak(msg)
+                
+                # Download and play the audio preview
+                temp_dir = tempfile.gettempdir()
+                audio_file = os.path.join(temp_dir, "canary_preview.m4a")
+                
+                print(f"    [Media] Downloading preview to {audio_file}...")
+                audio_r = requests.get(preview_url, timeout=10)
+                with open(audio_file, "wb") as f:
+                    f.write(audio_r.content)
+                    
+                play_audio_file(audio_file)
+                
+                # Cleanup
+                try:
+                    os.remove(audio_file)
+                except OSError:
+                    pass
+                    
+                return {"status": "success", "message": msg}
+    except Exception as e:
+        print(f"    [Media] API Error: {e}")
+        
+    msg = f"Sorry, I couldn't find or play any music for {query}."
+    speak(msg)
+    return {"status": "error", "message": msg}
 
-def execute_intent(intent: str, transcript: str) -> dict:
+def execute_intent(intent: str, transcript: str, profile: dict = None) -> dict:
     """
-    Given a coarse intent and transcript, invoke the appropriate mock tool.
-    In a real system, an SLM Agent would parse the transcript to extract args.
+    Given a coarse intent, transcript, and user profile, invoke the appropriate API tool.
     """
-    if not intent or intent not in INTENT_TOOL_MAP:
-        print(f"    [Agent] ❓ No specific tool for intent '{intent}' (Transcript: {transcript})")
-        return {"status": "ignored", "message": "No matching tool"}
-
-    func, default_args = INTENT_TOOL_MAP[intent]
+    profile = profile or {}
+    location = profile.get("location", "Bengaluru")
+    fav_music = profile.get("favorite_music_genre", "Pop")
     
-    # Very rudimentary arg extraction just to look nice in the CLI output
-    args = dict(default_args)
-    if func == control_smart_home:
-        # Extract device naively
-        t = transcript.lower()
-        if "light" in t: args["device"] = "lights"
-        elif "thermostat" in t: args["device"] = "thermostat"
-        elif "tv" in t: args["device"] = "TV"
-        else: args["device"] = "device"
+    # We map the intent loosely based on keywords
+    t = transcript.lower()
+    
+    if "weather" in t or "temperature" in t:
+        return get_weather(location=location)
         
-    elif func == play_media:
-        args["query"] = transcript
+    elif "news" in t or "headlines" in t:
+        return get_news(location=location)
         
-    return func(**args)
+    elif "play" in t or "song" in t or "music" in t:
+        # If they just said "play some music", use their favorite genre!
+        if "some music" in t or "a song" in t:
+            query = fav_music
+        else:
+            # Strip out generic words
+            query = t.replace("play", "").replace("canary", "").replace("hey", "").replace("some", "").replace("music", "").replace("please", "").strip()
+            if not query:
+                query = fav_music
+                
+        return play_media(query=query)
+        
+    else:
+        # Fallback if we don't understand
+        msg = "I'm sorry, I don't know how to handle that request yet."
+        print(f"    [Agent] ❓ {msg}")
+        speak(msg)
+        return {"status": "ignored", "message": "No matching API"}
