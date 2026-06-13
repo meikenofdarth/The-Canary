@@ -1,0 +1,99 @@
+{
+  "timestamp": "2026-06-13T18:55:13.288083",
+  "session_dir": "outputs/20260613_185455",
+  "drs_mode": "B",
+  "scene": {
+    "speaker_count": 2,
+    "complexity": 0.67,
+    "noise_level": 0.232,
+    "simul_speech": 1.0
+  },
+  "speakers": [
+    {
+      "id": "speaker_1",
+      "status": "READY",
+      "transcript": "Hello, can you please call from the render2 for me?",
+      "wakeword": false,
+      "wakeword_confidence": 0.0,
+      "wakeword_phrase": null,
+      "type": "QUESTION",
+      "type_confidence": 0.8,
+      "identity": "Sanchit",
+      "identity_confidence": 0.6702,
+      "known_user": true,
+      "start_time": 0.0,
+      "intent_result": {
+        "domain": "UNKNOWN",
+        "polarity": "NEUTRAL",
+        "confidence": 0.0,
+        "entities": {},
+        "raw_signals": [],
+        "original_text": "Hello, can you please call from the render2 for me?"
+      }
+    },
+    {
+      "id": "speaker_2",
+      "status": "REJECTED",
+      "transcript": "",
+      "wakeword": false,
+      "wakeword_confidence": 0.0,
+      "wakeword_phrase": null,
+      "type": "UNKNOWN",
+      "type_confidence": 0.0,
+      "identity": "UNKNOWN",
+      "identity_confidence": 0.6272,
+      "known_user": false,
+      "start_time": 0.0,
+      "intent_result": {
+        "domain": "UNKNOWN",
+        "polarity": "NEUTRAL",
+        "confidence": 0.0,
+        "entities": {},
+        "raw_signals": [],
+        "original_text": ""
+      }
+    }
+  ],
+  "wakeword_count": 0,
+  "command_count": 0,
+  "conflict": false,
+  "conflict_pair": null,
+  "route": "IGNORE",
+  "arbitration": {
+    "winner": null,
+    "route": "IGNORE",
+    "reason": "No wakeword commands detected.",
+    "speakers": [
+      {
+        "id": "speaker_1",
+        "identity": "Sanchit",
+        "identity_confidence": 0.6702,
+        "known_user": true,
+        "wakeword": false,
+        "wakeword_confidence": 0.0,
+        "transcript": "Hello, can you please call from the render2 for me?",
+        "type": "QUESTION",
+        "separation_quality": 1.0,
+        "identity_note": "",
+        "start_time": 0.0,
+        "priority": 0.4681,
+        "intent": "CALL"
+      },
+      {
+        "id": "speaker_2",
+        "identity": "UNKNOWN",
+        "identity_confidence": 0.0,
+        "known_user": false,
+        "wakeword": false,
+        "wakeword_confidence": 0.0,
+        "transcript": "",
+        "type": "UNKNOWN",
+        "separation_quality": 1.0,
+        "identity_note": "",
+        "start_time": 0.0,
+        "priority": 0.0,
+        "intent": null
+      }
+    ]
+  }
+}

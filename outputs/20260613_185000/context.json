@@ -1,0 +1,111 @@
+{
+  "timestamp": "2026-06-13T18:50:17.411016",
+  "session_dir": "outputs/20260613_185000",
+  "drs_mode": "C",
+  "scene": {
+    "speaker_count": 2,
+    "complexity": 0.709,
+    "noise_level": 0.363,
+    "simul_speech": 1.0
+  },
+  "speakers": [
+    {
+      "id": "speaker_1",
+      "status": "READY",
+      "transcript": "Raju, play me turn there two songs.",
+      "wakeword": true,
+      "wakeword_confidence": 1.0,
+      "wakeword_phrase": "raju",
+      "type": "COMMAND",
+      "type_confidence": 0.95,
+      "identity": "Hemang Seth",
+      "identity_confidence": 0.6957,
+      "known_user": true,
+      "start_time": 0.0,
+      "intent_result": {
+        "domain": "SONGS",
+        "polarity": "POSITIVE",
+        "confidence": 0.9167,
+        "entities": {
+          "song_title_candidate": "turn there two songs."
+        },
+        "raw_signals": [
+          "play",
+          "songs",
+          "play me turn there two songs"
+        ],
+        "original_text": "Raju, play me turn there two songs."
+      }
+    },
+    {
+      "id": "speaker_2",
+      "status": "READY",
+      "transcript": "No Raju play me, actually do songs.",
+      "wakeword": true,
+      "wakeword_confidence": 1.0,
+      "wakeword_phrase": "raju",
+      "type": "COMMAND",
+      "type_confidence": 0.95,
+      "identity": "Hemang Seth",
+      "identity_confidence": 0.8061,
+      "known_user": true,
+      "start_time": 0.0,
+      "intent_result": {
+        "domain": "SONGS",
+        "polarity": "NEGATIVE",
+        "confidence": 0.7333,
+        "entities": {
+          "song_title_candidate": "me, actually do songs."
+        },
+        "raw_signals": [
+          "[negated] play",
+          "[negated] songs",
+          "[negated] play me, actually do songs"
+        ],
+        "original_text": "No Raju play me, actually do songs."
+      }
+    }
+  ],
+  "wakeword_count": 2,
+  "command_count": 2,
+  "conflict": false,
+  "conflict_pair": null,
+  "route": "EXECUTE",
+  "arbitration": {
+    "winner": "speaker_2",
+    "route": "EXECUTE",
+    "reason": "All speakers share the same intent (PLAY_MEDIA). Executing for highest-priority speaker (Hemang Seth).",
+    "speakers": [
+      {
+        "id": "speaker_1",
+        "identity": "Hemang Seth",
+        "identity_confidence": 0.6957,
+        "known_user": true,
+        "wakeword": true,
+        "wakeword_confidence": 1.0,
+        "transcript": "Raju, play me turn there two songs.",
+        "type": "COMMAND",
+        "separation_quality": 1.0,
+        "identity_note": "",
+        "start_time": 0.0,
+        "priority": 0.8783,
+        "intent": "PLAY_MEDIA"
+      },
+      {
+        "id": "speaker_2",
+        "identity": "Hemang Seth",
+        "identity_confidence": 0.8061,
+        "known_user": true,
+        "wakeword": true,
+        "wakeword_confidence": 1.0,
+        "transcript": "No Raju play me, actually do songs.",
+        "type": "COMMAND",
+        "separation_quality": 1.0,
+        "identity_note": "",
+        "start_time": 0.0,
+        "priority": 0.9224,
+        "intent": "PLAY_MEDIA"
+      }
+    ]
+  }
+}

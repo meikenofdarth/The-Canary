@@ -1,0 +1,62 @@
+{
+  "timestamp": "2026-06-13T18:51:48.314275",
+  "session_dir": "outputs/20260613_185127",
+  "drs_mode": "A",
+  "scene": {
+    "speaker_count": 1,
+    "complexity": 0.08,
+    "noise_level": 0.268,
+    "simul_speech": 0.0
+  },
+  "speakers": [
+    {
+      "id": "speaker_1",
+      "status": "READY",
+      "transcript": "Hello, how are you today? Today's topic is very important. Today's poet is Parish Hojay. My Kapra is a gilly.",
+      "wakeword": false,
+      "wakeword_confidence": 0.0,
+      "wakeword_phrase": null,
+      "type": "UNKNOWN",
+      "type_confidence": 0.0,
+      "identity": "Sanchit",
+      "identity_confidence": 0.7549,
+      "known_user": true,
+      "start_time": 0.0,
+      "intent_result": {
+        "domain": "UNKNOWN",
+        "polarity": "NEUTRAL",
+        "confidence": 0.0,
+        "entities": {},
+        "raw_signals": [],
+        "original_text": "Hello, how are you today? Today's topic is very important. Today's poet is Parish Hojay. My Kapra is a gilly."
+      }
+    }
+  ],
+  "wakeword_count": 0,
+  "command_count": 0,
+  "conflict": false,
+  "conflict_pair": null,
+  "route": "IGNORE",
+  "arbitration": {
+    "winner": null,
+    "route": "IGNORE",
+    "reason": "No wakeword commands detected.",
+    "speakers": [
+      {
+        "id": "speaker_1",
+        "identity": "Sanchit",
+        "identity_confidence": 0.7549,
+        "known_user": true,
+        "wakeword": false,
+        "wakeword_confidence": 0.0,
+        "transcript": "Hello, how are you today? Today's topic is very important. Today's poet is Parish Hojay. My Kapra is a gilly.",
+        "type": "UNKNOWN",
+        "separation_quality": 1.0,
+        "identity_note": "",
+        "start_time": 0.0,
+        "priority": 0.502,
+        "intent": "GREETING"
+      }
+    ]
+  }
+}

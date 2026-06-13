@@ -29,21 +29,24 @@ from __future__ import annotations
 
 import json
 import datetime
+import re
 from pathlib import Path
 
 from .wakeword_detector  import detect_wakeword
 from .utterance_analyzer import analyze_utterance
 from .conflict_detector  import detect_conflict
 from .arbitration_engine import arbitrate, print_arbitration
+from .intent_engine      import analyze_intents_for_speakers
+from .response_builder   import build_response, print_response_summary
 
 
 # ─────────────────────────────────────────────────────────────────────────────
 #  TRANSCRIPT PARSER
 #  Reads speaker_N.txt files written by asr/transcribe.py
 # ─────────────────────────────────────────────────────────────────────────────
-def _parse_transcript(txt_path: Path) -> tuple[str | None, str]:
+def _parse_transcript(txt_path: Path) -> tuple[str | None, str, float]:
     """
-    Extract the clean transcript text and status from a speaker .txt file.
+    Extract the clean transcript text, status, and first segment start time from a speaker .txt file.
 
     .txt file format (READY example):
         [Language: en]
@@ -56,12 +59,12 @@ def _parse_transcript(txt_path: Path) -> tuple[str | None, str]:
         [0.00s → 3.10s] Hey, how are you?
         ...
 
-    Returns (transcript | None, status_string)
+    Returns (transcript | None, status_string, start_time)
     """
     try:
         content = txt_path.read_text(encoding="utf-8")
     except FileNotFoundError:
-        return None, "MISSING"
+        return None, "MISSING", 0.0
 
     lines = content.split("\n")
 
@@ -72,8 +75,19 @@ def _parse_transcript(txt_path: Path) -> tuple[str | None, str]:
             status = "READY" if "READY" in line else "REJECTED"
             break
 
+    # ── Parse segment starting time ───────────────────────────────────────
+    start_time = 0.0
+    for line in lines:
+        m = re.search(r"\[([0-9\.]+)s\s*(?:→|->)\s*[0-9\.]+s\]", line)
+        if m:
+            try:
+                start_time = float(m.group(1))
+                break
+            except ValueError:
+                pass
+
     if status != "READY":
-        return None, status
+        return None, status, start_time
 
     # ── Extract transcript ─────────────────────────────────────────────────
     # Metadata block = everything up to the first blank line.
@@ -94,9 +108,9 @@ def _parse_transcript(txt_path: Path) -> tuple[str | None, str]:
 
     # Reject parenthetical rejection messages like "(no speech detected...)"
     if transcript.startswith("(") and transcript.endswith(")"):
-        return None, "REJECTED"
+        return None, "REJECTED", start_time
 
-    return (transcript if transcript else None), status
+    return (transcript if transcript else None), status, start_time
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -187,12 +201,21 @@ def build_context(
         txt_path = out_dir / f"{spk_id}.txt"
         fname    = f"{spk_id}.wav"
 
-        transcript, status = _parse_transcript(txt_path)
+        transcript, status, start_time = _parse_transcript(txt_path)
 
         if transcript:
             ww = detect_wakeword(transcript)
+            utt = analyze_utterance(transcript)
+            if ww["wakeword"]:
+                type_val = "COMMAND"
+                type_conf = max(utt["confidence"], 0.95)
+            else:
+                type_val = utt["type"]
+                type_conf = utt["confidence"]
         else:
             ww = {"wakeword": False, "wakeword_confidence": 0.0, "matched_phrase": None}
+            type_val = "UNKNOWN"
+            type_conf = 0.0
 
         # Attach voice identity fields
         vid      = voice_ids.get(fname, {})
@@ -207,12 +230,13 @@ def build_context(
             "wakeword":            ww["wakeword"],
             "wakeword_confidence": ww["wakeword_confidence"],
             "wakeword_phrase":     ww["matched_phrase"],
-            "type":                "UNKNOWN",
-            "type_confidence":     0.0,
+            "type":                type_val,
+            "type_confidence":     type_conf,
             # Voice identity fields
             "identity":            identity,
             "identity_confidence": round(id_conf, 4),
             "known_user":          known,
+            "start_time":          start_time,
         })
 
     # ── Phase 2: Apply Routing Rules ─────────────────────────────────────────
@@ -292,7 +316,21 @@ def build_context(
         },
     }
 
-    # ── Save ──────────────────────────────────────────────────────────────
+    # ── Intent Engine & Response Builder ─────────────────────────────────────
+    analyze_intents_for_speakers(context["speakers"])
+    response = build_response(context, arb_result, out_dir)
+
+    # Save response.json also to project root directory
+    try:
+        root_path = Path("/Users/knight_striker/Desktop/The-Canary/response.json")
+        root_path.write_text(
+            json.dumps(response, indent=2, ensure_ascii=False),
+            encoding="utf-8",
+        )
+    except Exception as _root_err:
+        print(f"  [Context Engine] Warning: failed to save response.json to root — {_root_err}")
+
+    # ── Save context.json ───────────────────────────────────────────────────
     ctx_path = out_dir / "context.json"
     ctx_path.write_text(
         json.dumps(context, indent=2, ensure_ascii=False),
@@ -302,5 +340,6 @@ def build_context(
     # ── Print ─────────────────────────────────────────────────────────────
     _print_summary(context)
     print_arbitration(arb_result)
+    print_response_summary(response)
 
     return context

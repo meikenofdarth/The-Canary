@@ -177,6 +177,7 @@ def arbitrate(
             "type":                spk.get("type", "UNKNOWN"),
             "separation_quality":  sep_q,
             "identity_note":       identity_note,
+            "start_time":          spk.get("start_time", 0.0),
         }
         rec["priority"] = _compute_priority(rec)
         if spk.get("transcript"):
@@ -188,6 +189,15 @@ def arbitrate(
 
     # ── Step 2: Filter to wakeword-command speakers only ─────────────────────
     active = [s for s in arb_speakers if s["wakeword"] and s.get("type") == "COMMAND"]
+
+    # Known vs unknown priority filter:
+    # If both known and unknown said the wakeword, proceed with known.
+    # If only known said it, proceed with known.
+    # If only unknown said it, proceed with unknown.
+    active_known = [s for s in active if s["known_user"]]
+    active_unknown = [s for s in active if not s["known_user"]]
+    if active_known and active_unknown:
+        active = active_known
 
     # ── Step 3: Apply arbitration rules ──────────────────────────────────────
 
@@ -216,8 +226,8 @@ def arbitrate(
             "conflict":     False,
         }
 
-    # Multiple active speakers — sort by priority
-    active_sorted = sorted(active, key=lambda s: s["priority"], reverse=True)
+    # Multiple active speakers — sort by priority and then by start_time (earliest first)
+    active_sorted = sorted(active, key=lambda s: (-s["priority"], s.get("start_time", 0.0)))
     top    = active_sorted[0]
     second = active_sorted[1]
     gap    = top["priority"] - second["priority"]
@@ -281,15 +291,17 @@ def arbitrate(
             "conflict":     True,
         }
 
-    # Rule 5 — Non-conflicting, close priority → sequential execution
+    # Rule 5 — Non-conflicting, close priority → sequential execution (ordered by start_time)
+    by_time = sorted(active, key=lambda s: s.get("start_time", 0.0))
+    winner_spk = by_time[0]
     return {
         "arbitration": arb_speakers,
-        "winner":       top["id"],  # first in priority order
+        "winner":       winner_spk["id"],
         "route":        "SEQUENTIAL",
         "reason":       (
             f"Non-conflicting commands from "
-            f"{', '.join(s['identity'] if s['known_user'] else s['id'] for s in active_sorted)}. "
-            f"Sequential execution."
+            f"{', '.join(s['identity'] if s['known_user'] else s['id'] for s in by_time)}. "
+            f"Sequential execution ordered by time of command."
         ),
         "conflict":     False,
     }

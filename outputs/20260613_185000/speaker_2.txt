@@ -1,0 +1,8 @@
+[Language: en]
+[Status: ✓  READY — meaningful speech detected]
+[RMS: -22.9 dBFS | Speech ratio: 78%]
+
+No Raju play me, actually do songs.
+
+--- Segments ---
+[0.00s → 5.00s] No Raju play me, actually do songs.
