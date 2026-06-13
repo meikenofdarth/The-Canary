@@ -113,12 +113,15 @@ def play_media(query: str, fallback_query: str = "Pop") -> dict:
     speak(msg)
     return {"status": "error", "message": msg}
 
-def execute_intent(domain: str, transcript: str, profile: dict = None) -> dict:
+def execute_intent(domain: str, transcript: str, profile: dict = None, entities: dict = None) -> dict:
     """
-    Given a domain, transcript, and user profile, invoke the appropriate API tool.
+    Given a domain, transcript, user profile, and extracted entities, invoke the appropriate API tool.
     """
     profile = profile or {}
-    location = profile.get("location", "Bengaluru")
+    entities = entities or {}
+    
+    # Priority: 1. Spoken Entity Location -> 2. User Profile Location -> 3. Default "Bengaluru"
+    location = entities.get("location") or profile.get("location", "Bengaluru")
     fav_music = profile.get("favorite_music_genre", "Pop")
     
     t = transcript.lower()
