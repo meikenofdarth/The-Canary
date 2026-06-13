@@ -1,5 +1,0 @@
-[Language: hi]
-[Status: ✗  REJECTED — Whisper confidence too low (noise/artifacts)]
-[RMS: -24.5 dBFS | Speech ratio: 66%]
-
-(Whisper confidence too low — stream is mostly noise/artifacts)
