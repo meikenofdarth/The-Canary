@@ -39,12 +39,15 @@ import soundfile as sf
 
 VOICES_ROOT = Path(__file__).parent.parent / "Voices"
 
-# Fusion weights
-W_EMBEDDING = 0.60
-W_PITCH     = 0.15
-W_ENERGY    = 0.10
-W_RATE      = 0.10
-W_MFCC      = 0.05
+# Fusion weights  (must sum to 1.0)
+# ECAPA-TDNN embedding gets 95%: it is trained specifically for speaker ID
+# and is far more discriminative than hand-crafted acoustic features on
+# short (7s) Indian-household recordings with background noise.
+W_EMBEDDING = 0.95
+W_PITCH     = 0.01
+W_ENERGY    = 0.01
+W_RATE      = 0.01
+W_MFCC      = 0.02
 
 # Gaussian kernel widths (σ) — tuned to typical inter-speaker ranges
 SIGMA_PITCH  = 25.0    # Hz   — ~2 semitones for typical inter-speaker pitch diff

@@ -1,0 +1,8 @@
+[Language: hi]
+[Status: ✓  READY — meaningful speech detected]
+[RMS: -24.4 dBFS | Speech ratio: 60%]
+
+No Raju listen to me.
+
+--- Segments ---
+[0.00s → 4.00s] No Raju listen to me.

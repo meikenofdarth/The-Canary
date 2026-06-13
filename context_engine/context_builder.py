@@ -1,29 +1,28 @@
 """
 context_engine/context_builder.py
 ====================================
-Assembles all pipeline outputs into a single structured context.json.
+Assembles all pipeline outputs into a single structured context.json,
+runs the User Arbitration Engine, and prints the terminal summary.
 
 Input
 -----
-    out_dir  : pathlib.Path — session output directory (speakers/.txt files live here)
-    drs      : dict         — result from drs_shadow() in run_canary.py
-    n_spk    : int          — number of detected speakers
+    out_dir   : pathlib.Path — session output directory (speakers/.txt files live here)
+    drs       : dict         — result from drs_shadow() in run_canary.py
+    n_spk     : int          — number of detected speakers
+    voice_ids : dict         — keyed by "speaker_N.wav" → ranker result dict
+                               (may be empty / missing keys for UNKNOWN speakers)
 
 Output
 ------
     context.json written to out_dir/
     dict returned to caller
 
-Routing table  (based on command_count = speakers with wakeword AND COMMAND type)
+Routing table  (post-arbitration)
 ---------------------------------------------------------------------------
-    command_count == 0                           → IGNORE
-    command_count == 1                           → EXECUTE
-    command_count >= 2  AND conflict found       → CLARIFY
-    command_count >= 2  AND no conflict          → MULTI_EXECUTE
-
-Key insight: wakeword_count is NOT used for routing.
-  • "Cannery, no no no" has wakeword=True but type=CONVERSATION → does NOT count.
-  • "Hey Canary play music" has wakeword=True AND type=COMMAND → counts.
+    IGNORE            — no wakeword commands
+    EXECUTE           — single clear winner
+    CLARIFY           — conflicting commands, needs user input
+    SEQUENTIAL        — multiple non-conflicting commands, queue them
 """
 
 from __future__ import annotations
@@ -35,6 +34,7 @@ from pathlib import Path
 from .wakeword_detector  import detect_wakeword
 from .utterance_analyzer import analyze_utterance
 from .conflict_detector  import detect_conflict
+from .arbitration_engine import arbitrate, print_arbitration
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -100,13 +100,14 @@ def _parse_transcript(txt_path: Path) -> tuple[str | None, str]:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-#  TERMINAL SUMMARY
+#  TERMINAL SUMMARY  (Context Engine block)
 # ─────────────────────────────────────────────────────────────────────────────
 def _print_summary(ctx: dict) -> None:
     route_labels = {
-        "IGNORE":        "⚫  IGNORE         — no wakeword detected, all ambient speech",
-        "EXECUTE":       "🟢  EXECUTE         — single clear command, proceeding",
-        "CLARIFY":       "🟡  CLARIFY         — conflicting commands, need confirmation",
+        "IGNORE":     "⚫  IGNORE         — no wakeword detected, all ambient speech",
+        "EXECUTE":    "🟢  EXECUTE         — single clear command, proceeding",
+        "CLARIFY":    "🟡  CLARIFY         — conflicting commands, need confirmation",
+        "SEQUENTIAL": "🔵  SEQUENTIAL      — multiple commands queued",
         "MULTI_EXECUTE": "🔵  MULTI_EXECUTE   — multiple commands, running sequentially",
     }
 
@@ -125,13 +126,19 @@ def _print_summary(ctx: dict) -> None:
         ok   = "✓" if spk["transcript"] else "✗"
         ww   = "🔔 WAKEWORD" if spk["wakeword"] else "          "
         type_label = spk["type"]
-        print(f"  [{ok}] {spk['id']}  [{type_label:<12s}]  {ww}")
+
+        # Show identity if available
+        identity = spk.get("identity", "UNKNOWN")
+        id_conf  = spk.get("identity_confidence", 0.0)
+        id_str   = f" [{identity}  {id_conf:.2f}]" if identity != "UNKNOWN" else " [UNKNOWN]"
+
+        print(f"  [{ok}] {spk['id']}  [{type_label:<12s}]  {ww}{id_str}")
         if spk["transcript"]:
             preview = spk["transcript"][:72] + ("…" if len(spk["transcript"]) > 72 else "")
             print(f"       \"{preview}\"")
 
     print()
-    if ctx["conflict"]:
+    if ctx.get("conflict"):
         cp = ctx.get("conflict_pair") or []
         print(f"  ⚠  Conflict detected: {cp[0]!r} vs {cp[1]!r}")
 
@@ -144,7 +151,12 @@ def _print_summary(ctx: dict) -> None:
 # ─────────────────────────────────────────────────────────────────────────────
 #  PUBLIC API
 # ─────────────────────────────────────────────────────────────────────────────
-def build_context(out_dir: Path, drs: dict, n_spk: int) -> dict:
+def build_context(
+    out_dir:   Path,
+    drs:       dict,
+    n_spk:     int,
+    voice_ids: dict | None = None,
+) -> dict:
     """
     Build and save context.json for one pipeline run.
 
@@ -157,18 +169,23 @@ def build_context(out_dir: Path, drs: dict, n_spk: int) -> dict:
         noise_level, overlap_prob, speaker_count.
     n_spk : int
         Number of speakers detected by the separation stage.
+    voice_ids : dict | None
+        Keyed by "speaker_N.wav" → voice ranker result dict.
+        If None, identity fields will be UNKNOWN for all speakers.
 
     Returns
     -------
     dict — the full context (also written to out_dir/context.json).
     """
-    out_dir = Path(out_dir)
+    out_dir   = Path(out_dir)
+    voice_ids = voice_ids or {}
     speakers: list[dict] = []
 
     # ── Phase 1: Parse transcripts and detect wake words for all speakers ────
     for i in range(1, n_spk + 1):
         spk_id   = f"speaker_{i}"
         txt_path = out_dir / f"{spk_id}.txt"
+        fname    = f"{spk_id}.wav"
 
         transcript, status = _parse_transcript(txt_path)
 
@@ -176,6 +193,12 @@ def build_context(out_dir: Path, drs: dict, n_spk: int) -> dict:
             ww = detect_wakeword(transcript)
         else:
             ww = {"wakeword": False, "wakeword_confidence": 0.0, "matched_phrase": None}
+
+        # Attach voice identity fields
+        vid      = voice_ids.get(fname, {})
+        identity = vid.get("speaker", "UNKNOWN")
+        id_conf  = float(vid.get("confidence", 0.0))
+        known    = identity != "UNKNOWN"
 
         speakers.append({
             "id":                  spk_id,
@@ -186,6 +209,10 @@ def build_context(out_dir: Path, drs: dict, n_spk: int) -> dict:
             "wakeword_phrase":     ww["matched_phrase"],
             "type":                "UNKNOWN",
             "type_confidence":     0.0,
+            # Voice identity fields
+            "identity":            identity,
+            "identity_confidence": round(id_conf, 4),
+            "known_user":          known,
         })
 
     # ── Phase 2: Apply Routing Rules ─────────────────────────────────────────
@@ -193,32 +220,29 @@ def build_context(out_dir: Path, drs: dict, n_spk: int) -> dict:
     wakeword_count = len(active_ww_indices)
 
     if wakeword_count == 0:
-        # Rule 1: if no wake word is detected, stop the computation completely
         command_count = 0
         conflict = False
         conflict_pair = None
+        conflict_result = {"conflict": False, "conflict_pair": None}
         route = "IGNORE"
 
     elif wakeword_count == 1:
-        # Rule 2: if one speaker says the wake word, we can ignore the next person
         idx = active_ww_indices[0]
         transcript = speakers[idx]["transcript"]
         utt = analyze_utterance(transcript)
-        # Any wake-word-addressed speech is considered a directed command/action
         speakers[idx]["type"] = "COMMAND"
         speakers[idx]["type_confidence"] = max(utt["confidence"], 0.95)
 
         command_count = 1
         conflict = False
         conflict_pair = None
+        conflict_result = {"conflict": False, "conflict_pair": None}
         route = "EXECUTE"
 
     else:
-        # Rule 3: if both of them have used the wake word, we classify them
         for idx in active_ww_indices:
             transcript = speakers[idx]["transcript"]
             utt = analyze_utterance(transcript)
-            # Any wake-word-addressed speech is considered a directed command/action
             speakers[idx]["type"] = "COMMAND"
             speakers[idx]["type_confidence"] = max(utt["confidence"], 0.95)
 
@@ -236,6 +260,12 @@ def build_context(out_dir: Path, drs: dict, n_spk: int) -> dict:
         else:
             route = "MULTI_EXECUTE"
 
+    # ── Phase 3: User Arbitration Engine ─────────────────────────────────────
+    arb_result = arbitrate(speakers, voice_ids, conflict_result)
+
+    # Arbitration may override the initial route
+    arb_route = arb_result.get("route", route)
+
     # ── Assemble ──────────────────────────────────────────────────────────
     context: dict = {
         "timestamp":   datetime.datetime.now().isoformat(),
@@ -247,12 +277,19 @@ def build_context(out_dir: Path, drs: dict, n_spk: int) -> dict:
             "noise_level":   drs.get("noise_level",      0.0),
             "simul_speech":  drs.get("overlap_prob",     0.0),
         },
-        "speakers":       speakers,
+        "speakers":        speakers,
         "wakeword_count":  wakeword_count,
         "command_count":   command_count,
         "conflict":        conflict,
         "conflict_pair":   conflict_pair,
-        "route":           route,
+        "route":           arb_route,
+        # Arbitration results
+        "arbitration": {
+            "winner":      arb_result.get("winner"),
+            "route":       arb_route,
+            "reason":      arb_result.get("reason", ""),
+            "speakers":    arb_result.get("arbitration", []),
+        },
     }
 
     # ── Save ──────────────────────────────────────────────────────────────
@@ -264,5 +301,6 @@ def build_context(out_dir: Path, drs: dict, n_spk: int) -> dict:
 
     # ── Print ─────────────────────────────────────────────────────────────
     _print_summary(context)
+    print_arbitration(arb_result)
 
     return context

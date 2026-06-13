@@ -1,8 +1,0 @@
-[Language: en]
-[Status: ✓  READY — meaningful speech detected]
-[RMS: -25.1 dBFS | Speech ratio: 69%]
-
-Hello, my day was so good. I made some on today. It was very
-
---- Segments ---
-[0.00s → 6.92s] Hello, my day was so good. I made some on today. It was very

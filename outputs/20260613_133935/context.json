@@ -1,0 +1,52 @@
+{
+  "timestamp": "2026-06-13T13:39:54.200431",
+  "session_dir": "outputs/20260613_133935",
+  "drs_mode": "A",
+  "scene": {
+    "speaker_count": 1,
+    "complexity": 0.179,
+    "noise_level": 0.596,
+    "simul_speech": 0.0
+  },
+  "speakers": [
+    {
+      "id": "speaker_1",
+      "status": "READY",
+      "transcript": "Hi can, hi Raju, how are you? Can you play me some good songs please?",
+      "wakeword": true,
+      "wakeword_confidence": 1.0,
+      "wakeword_phrase": "hi raju",
+      "type": "COMMAND",
+      "type_confidence": 0.95,
+      "identity": "Hemang Seth",
+      "identity_confidence": 0.8763,
+      "known_user": true
+    }
+  ],
+  "wakeword_count": 1,
+  "command_count": 1,
+  "conflict": false,
+  "conflict_pair": null,
+  "route": "EXECUTE",
+  "arbitration": {
+    "winner": "speaker_1",
+    "route": "EXECUTE",
+    "reason": "Hemang Seth issued the only wakeword command. Priority: 0.95.",
+    "speakers": [
+      {
+        "id": "speaker_1",
+        "identity": "Hemang Seth",
+        "identity_confidence": 0.8763,
+        "known_user": true,
+        "wakeword": true,
+        "wakeword_confidence": 1.0,
+        "transcript": "Hi can, hi Raju, how are you? Can you play me some good songs please?",
+        "type": "COMMAND",
+        "separation_quality": 1.0,
+        "identity_note": "",
+        "priority": 0.9505,
+        "intent": "PLAY_MEDIA"
+      }
+    ]
+  }
+}

@@ -1,8 +1,0 @@
-[Language: en]
-[Status: ✓  READY — meaningful speech detected]
-[RMS: -23.7 dBFS | Speech ratio: 60%]
-
-Hi, Kennedy. My name is Himang. How are you? I am fine.
-
---- Segments ---
-[0.00s → 7.00s] Hi, Kennedy. My name is Himang. How are you? I am fine.

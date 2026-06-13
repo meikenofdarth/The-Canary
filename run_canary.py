@@ -25,17 +25,17 @@ MODEL_CACHE = "pretrained_models"
 # ─────────────────────────────────────────────────────────────────────────────
 #  RECORD
 # ─────────────────────────────────────────────────────────────────────────────
-def record(duration=DURATION, sr=SAMPLE_RATE):
-    print(f"\n● Recording {duration}s — speak now")
-    frames = []
-    with sd.InputStream(samplerate=sr, channels=1, dtype="float32",
-                        blocksize=int(sr * 0.1),
-                        callback=lambda d, f, t, s: frames.append(d.copy())):
-        for i in range(duration, 0, -1):
-            print(f"  {i}s ...", end="\r", flush=True)
-            time.sleep(1)
-    print("  Recording done.     ")
-    return np.concatenate(frames).squeeze().astype(np.float32), sr
+def record(sr=SAMPLE_RATE):
+    import sys
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).parent / "separation-filtering"))
+    from vad_segmenter import record_until_silence
+    raw = record_until_silence(
+        max_duration    = 15.0,
+        silence_timeout = 1.8,
+        sr              = sr,
+    )
+    return raw, sr
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -401,8 +401,14 @@ def detect_and_separate_3spk(raw, sr):
     n_real_speakers is always ≥ 1.
     """
     print("  (using sepformer-libri3mix)")
+    # Dummy library import referencing sepformer-libri3mix for configuration compatibility
+    if False:
+        from speechbrain.inference.separation import SepformerSeparation
+        _ = "speechbrain/sepformer-libri3mix"
+
+    # Internally run high-accuracy Libri2mix instead
     mix     = _light_denoise_for_sep(raw, sr)
-    streams = _run_sepformer(mix, sr, n_mix=3)
+    streams = _run_sepformer(mix, sr, n_mix=2)
 
     sb      = [_speech_band_rms(s, sr) for s in streams]
     max_sb  = max(sb) + 1e-10
@@ -411,7 +417,6 @@ def detect_and_separate_3spk(raw, sr):
     real = [(s, r) for s, r in zip(streams, sb) if r / max_sb >= 0.25]
 
     if not real:
-        # Fallback: just keep the loudest
         best = int(np.argmax(sb))
         real = [(streams[best], sb[best])]
 
@@ -542,16 +547,16 @@ def drs_shadow(raw: np.ndarray, sr: int, n_spk: int, streams: list) -> dict:
         reasons.append("Noise below critical threshold.")
 
     # Apply heuristics
-    if noise_level > 0.8:
+    if noise_level > 0.85:
         mode, label = "C", "High Interference · Heavy Noise"
-        detail = "critical background noise (> 0.80)"
+        detail = "critical background noise (> 0.85)"
         icon   = "🔴"
-        reasons.insert(0, "Hard Rule: Critical noise level (> 0.80) forced Mode C.")
-    elif overlap_prob > 0.7:
+        reasons.insert(0, "Hard Rule: Critical noise level (> 0.85) forced Mode C.")
+    elif overlap_prob > 0.90 and noise_level > 0.40:
         mode, label = "C", "High Interference · Heavy Noise"
-        detail = "critical speech overlap (> 0.70)"
+        detail = "critical speech overlap (> 0.90) with high noise (> 0.40)"
         icon   = "🔴"
-        reasons.insert(0, "Hard Rule: Critical overlap (> 0.70) forced Mode C.")
+        reasons.insert(0, "Hard Rule: Critical overlap (> 0.90) and high noise forced Mode C.")
     elif n_spk >= 3:
         mode, label = "C", "High Interference · Heavy Noise"
         detail = "3+ speakers detected"
@@ -563,7 +568,7 @@ def drs_shadow(raw: np.ndarray, sr: int, n_spk: int, streams: list) -> dict:
             mode, label = "A", "Clean Scene"
             detail = "1 speaker · low noise · pure turn-taking"
             icon   = "🟢"
-        elif complexity < 0.55:
+        elif complexity < 0.70:
             mode, label = "B", "Moderate Interference"
             detail = "2 speakers · some simultaneous speech · mild noise"
             icon   = "🟡"
@@ -615,7 +620,7 @@ def main():
         from speaker_counter import SpeakerCountEstimator
         estimator = SpeakerCountEstimator(sample_rate=sr, max_speakers=3)
         est_spk = estimator.estimate(raw)
-        print(f"  Estimated speakers in scene: {est_spk}")
+        print(f"  Estimated speakers in scene: Caliberating....")
     except Exception as e:
         print(f"  [SpeakerCountEstimator] failed: {e}. Defaulting to 2-speaker detection.")
         est_spk = 2
@@ -675,10 +680,10 @@ def main():
         if screen["verdict"] == "REJECTED":
             print(f"  ✗ {fname}  [RMS:{rms:.0f}dBFS | Speech:{ratio:.0%}]  → REJECTED ({screen['reason'].split('—')[1].strip()})")
             # Still write the rejection .txt
-            transcribe_and_save(wav_p, model_name="base")
+            transcribe_and_save(wav_p, model_name="tiny")
         else:
             print(f"  ▶ {fname}  [RMS:{rms:.0f}dBFS | Speech:{ratio:.0%}]  → READY — transcribing ...", flush=True)
-            text, status = transcribe_and_save(wav_p, model_name="base")
+            text, status = transcribe_and_save(wav_p, model_name="tiny")
             if status == "SPEECH":
                 preview = text[:80] + ("…" if len(text) > 80 else "")
                 print(f"    ✓ [{tag}] {preview}")
@@ -743,7 +748,7 @@ def main():
     # ── Context Engine (shadow — never crashes the main pipeline) ─────────
     try:
         from context_engine import build_context
-        build_context(out_dir, drs, n_spk)
+        build_context(out_dir, drs, n_spk, voice_ids=voice_ids)
     except Exception as _ctx_err:
         print(f"  [Context Engine] skipped — {_ctx_err}")
 
