@@ -1,0 +1,12 @@
+[Language: hi]
+[Status: ✓  READY — meaningful speech detected]
+[RMS: -19.0 dBFS | Speech ratio: 77%]
+
+Hello, how are you today? Today's topic is very important. Today's share is about share. Sorry. My question is...
+
+--- Segments ---
+[0.00s → 1.40s] Hello, how are you today?  [low confidence]
+[1.40s → 3.48s] Today's topic is very important.  [low confidence]
+[3.48s → 5.44s] Today's share is about share.  [low confidence]
+[5.44s → 6.04s] Sorry.  [low confidence]
+[6.04s → 7.04s] My question is...  [low confidence]

@@ -112,8 +112,17 @@ def _record_smart(label: str) -> np.ndarray:
 
     def _keyboard_watcher():
         try:
-            sys.stdin.readline()
-            stop_event.set()
+            if os.name == "nt":
+                sys.stdin.readline()
+                stop_event.set()
+            else:
+                import select
+                while not stop_event.is_set():
+                    rlist, _, _ = select.select([sys.stdin], [], [], 0.1)
+                    if rlist:
+                        sys.stdin.readline()
+                        stop_event.set()
+                        break
         except Exception:
             pass
 
@@ -213,6 +222,7 @@ def _record_smart(label: str) -> np.ndarray:
     if stop_event.is_set():
         print(f"\n  ⏹  Stopped by ENTER.                              ")
 
+    stop_event.set()  # Signal keyboard watcher thread to exit if VAD auto-stopped
     stream.stop()
     stream.close()
 
