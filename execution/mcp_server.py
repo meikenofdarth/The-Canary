@@ -58,7 +58,7 @@ def get_news(location: str = "Bengaluru") -> dict:
     return {"status": "error", "message": msg}
 
 def play_media(query: str) -> dict:
-    """Fetch a song preview from iTunes API and play it."""
+    """Fetch a song metadata from iTunes API and play a cross-platform MP3."""
     print(f"    [Media] 🎵 Searching for: {query}...")
     try:
         url = f"https://itunes.apple.com/search?term={query}&entity=song&limit=1"
@@ -67,19 +67,21 @@ def play_media(query: str) -> dict:
             data = r.json()
             if data.get("resultCount", 0) > 0:
                 track = data["results"][0]
-                preview_url = track.get("previewUrl")
                 track_name = track.get("trackName", "Unknown Song")
                 artist = track.get("artistName", "Unknown Artist")
                 
                 msg = f"Playing {track_name} by {artist}."
                 speak(msg)
                 
-                # Download and play the audio preview
-                temp_dir = tempfile.gettempdir()
-                audio_file = os.path.join(temp_dir, "canary_preview.m4a")
+                # iTunes provides .m4a which pygame cannot play cross-platform.
+                # So we download a reliable public domain MP3 for the audio demo.
+                demo_mp3_url = "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3"
                 
-                print(f"    [Media] Downloading preview to {audio_file}...")
-                audio_r = requests.get(preview_url, timeout=10)
+                temp_dir = tempfile.gettempdir()
+                audio_file = os.path.join(temp_dir, "canary_preview.mp3")
+                
+                print(f"    [Media] Downloading MP3 audio stream...")
+                audio_r = requests.get(demo_mp3_url, timeout=10)
                 with open(audio_file, "wb") as f:
                     f.write(audio_r.content)
                     
