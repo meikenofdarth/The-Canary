@@ -10,20 +10,24 @@ def test_weather():
     print("\n--- Testing Weather API ---")
     payload = {
         "route": "EXECUTE",
-        "arbitration": {
-            "winner": "speaker_1",
-            "speakers": [
-                {
-                    "id": "speaker_1",
-                    "identity": "Sanchit",
-                    "known_user": True,
-                    "intent": "WEATHER",
-                    "transcript": "What's the weather today?",
-                    "wakeword": True,
-                    "type": "COMMAND"
-                }
-            ]
-        }
+        "active_command": {
+            "speaker_id": "speaker_1",
+            "identity": "Sanchit",
+            "known_user": True,
+            "domain": "WEATHER",
+            "transcript": "What's the weather today?",
+            "wakeword": True,
+            "type": "COMMAND"
+        },
+        "all_speakers": [
+            {
+                "speaker_id": "speaker_1",
+                "identity": "Sanchit",
+                "known_user": True,
+                "domain": "WEATHER",
+                "wakeword": True
+            }
+        ]
     }
     process_arbitration(payload)
 
@@ -31,20 +35,24 @@ def test_news():
     print("\n--- Testing News API ---")
     payload = {
         "route": "EXECUTE",
-        "arbitration": {
-            "winner": "speaker_2",
-            "speakers": [
-                {
-                    "id": "speaker_2",
-                    "identity": "Hemang Seth",
-                    "known_user": True,
-                    "intent": "NEWS",
-                    "transcript": "Read me the news.",
-                    "wakeword": True,
-                    "type": "COMMAND"
-                }
-            ]
-        }
+        "active_command": {
+            "speaker_id": "speaker_2",
+            "identity": "Hemang Seth",
+            "known_user": True,
+            "domain": "NEWS",
+            "transcript": "Read me the news.",
+            "wakeword": True,
+            "type": "COMMAND"
+        },
+        "all_speakers": [
+            {
+                "speaker_id": "speaker_2",
+                "identity": "Hemang Seth",
+                "known_user": True,
+                "domain": "NEWS",
+                "wakeword": True
+            }
+        ]
     }
     process_arbitration(payload)
 
@@ -52,50 +60,60 @@ def test_music():
     print("\n--- Testing Music API ---")
     payload = {
         "route": "EXECUTE",
-        "arbitration": {
-            "winner": "speaker_1",
-            "speakers": [
-                {
-                    "id": "speaker_1",
-                    "identity": "Sanchit",
-                    "known_user": True,
-                    "intent": "PLAY_MEDIA",
-                    "transcript": "Play a song.",
-                    "wakeword": True,
-                    "type": "COMMAND"
-                }
-            ]
-        }
+        "active_command": {
+            "speaker_id": "speaker_1",
+            "identity": "Sanchit",
+            "known_user": True,
+            "domain": "SONGS",
+            "transcript": "Play a song.",
+            "wakeword": True,
+            "type": "COMMAND"
+        },
+        "all_speakers": [
+            {
+                "speaker_id": "speaker_1",
+                "identity": "Sanchit",
+                "known_user": True,
+                "domain": "SONGS",
+                "wakeword": True
+            }
+        ]
     }
     process_arbitration(payload)
     
 def test_conflict():
     print("\n--- Testing Known-User Conflict ---")
     payload = {
-        "route": "EXECUTE", # Note: the override happens inside process_arbitration!
-        "arbitration": {
-            "winner": "speaker_1",
-            "speakers": [
-                {
-                    "id": "speaker_1",
-                    "identity": "Sanchit",
-                    "known_user": True,
-                    "intent": "PLAY_MEDIA",
-                    "transcript": "Play some jazz.",
-                    "wakeword": True,
-                    "type": "COMMAND"
-                },
-                {
-                    "id": "speaker_2",
-                    "identity": "Hemang Seth",
-                    "known_user": True,
-                    "intent": "WEATHER",
-                    "transcript": "What's the weather?",
-                    "wakeword": True,
-                    "type": "COMMAND"
-                }
-            ]
-        }
+        "route": "EXECUTE",
+        "conflict": {
+            "detected": True
+        },
+        "active_command": {
+            "speaker_id": "speaker_1",
+            "identity": "Sanchit",
+            "known_user": True,
+            "domain": "SONGS"
+        },
+        "all_speakers": [
+            {
+                "speaker_id": "speaker_1",
+                "identity": "Sanchit",
+                "known_user": True,
+                "domain": "SONGS",
+                "transcript": "Play some jazz.",
+                "wakeword": True,
+                "type": "COMMAND"
+            },
+            {
+                "speaker_id": "speaker_2",
+                "identity": "Hemang Seth",
+                "known_user": True,
+                "domain": "WEATHER",
+                "transcript": "What's the weather?",
+                "wakeword": True,
+                "type": "COMMAND"
+            }
+        ]
     }
     process_arbitration(payload)
 

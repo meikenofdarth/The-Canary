@@ -101,30 +101,29 @@ def play_media(query: str) -> dict:
     speak(msg)
     return {"status": "error", "message": msg}
 
-def execute_intent(intent: str, transcript: str, profile: dict = None) -> dict:
+def execute_intent(domain: str, transcript: str, profile: dict = None) -> dict:
     """
-    Given a coarse intent, transcript, and user profile, invoke the appropriate API tool.
+    Given a domain, transcript, and user profile, invoke the appropriate API tool.
     """
     profile = profile or {}
     location = profile.get("location", "Bengaluru")
     fav_music = profile.get("favorite_music_genre", "Pop")
     
-    # We map the intent loosely based on keywords
     t = transcript.lower()
     
-    if "weather" in t or "temperature" in t:
+    if domain == "WEATHER":
         return get_weather(location=location)
         
-    elif "news" in t or "headlines" in t:
+    elif domain == "NEWS":
         return get_news(location=location)
         
-    elif "play" in t or "song" in t or "music" in t:
+    elif domain == "SONGS":
         # If they just said "play some music", use their favorite genre!
         if "some music" in t or "a song" in t:
             query = fav_music
         else:
             # Strip out generic words
-            query = t.replace("play", "").replace("canary", "").replace("hey", "").replace("some", "").replace("music", "").replace("please", "").strip()
+            query = t.replace("play", "").replace("canary", "").replace("hey", "").replace("some", "").replace("music", "").replace("please", "").replace("songs from", "").strip()
             if not query:
                 query = fav_music
                 
@@ -132,7 +131,7 @@ def execute_intent(intent: str, transcript: str, profile: dict = None) -> dict:
         
     else:
         # Fallback if we don't understand
-        msg = "I'm sorry, I don't know how to handle that request yet."
+        msg = f"I'm sorry, I don't know how to handle the {domain} request yet."
         print(f"    [Agent] ❓ {msg}")
         speak(msg)
         return {"status": "ignored", "message": "No matching API"}

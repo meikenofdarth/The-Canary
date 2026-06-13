@@ -2,12 +2,12 @@
 """
 run_execution.py
 ================
-CLI utility to process a context.json payload from The Canary and execute the
+CLI utility to process a response.json payload from The Canary and execute the
 resulting intents using the simulated MCP server.
 
 Usage:
-    python3 run_execution.py [path/to/context.json]
-    If no path is provided, it will automatically find the latest context.json in outputs/
+    python3 run_execution.py [path/to/response.json]
+    If no path is provided, it will automatically find the latest response.json in outputs/
 """
 
 import sys
@@ -16,13 +16,13 @@ from pathlib import Path
 from execution.queue import process_arbitration
 
 def get_latest_context():
-    """Finds the most recently created context.json in the outputs directory."""
+    """Finds the most recently created response.json in the outputs directory."""
     outputs_dir = Path("outputs")
     if not outputs_dir.exists():
         return None
         
-    # Get all context.json files sorted by modification time (newest first)
-    contexts = list(outputs_dir.rglob("context.json"))
+    # Get all response.json files sorted by modification time (newest first)
+    contexts = list(outputs_dir.rglob("response.json"))
     if not contexts:
         return None
         
