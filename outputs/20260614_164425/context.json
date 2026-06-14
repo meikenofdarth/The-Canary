@@ -1,0 +1,103 @@
+{
+  "timestamp": "2026-06-14T16:44:44.394008",
+  "session_dir": "outputs/20260614_164425",
+  "drs_mode": "B",
+  "scene": {
+    "speaker_count": 2,
+    "complexity": 0.627,
+    "noise_level": 0.089,
+    "simul_speech": 1.0
+  },
+  "speakers": [
+    {
+      "id": "speaker_1",
+      "status": "READY",
+      "transcript": "Raju, what is the weather in Luxembourg?",
+      "wakeword": true,
+      "wakeword_confidence": 1.0,
+      "wakeword_phrase": "raju",
+      "type": "COMMAND",
+      "type_confidence": 0.95,
+      "identity": "Hemang Seth",
+      "identity_confidence": 0.7904,
+      "known_user": true,
+      "start_time": 0.0,
+      "intent_result": {
+        "domain": "WEATHER",
+        "polarity": "POSITIVE",
+        "confidence": 0.55,
+        "entities": {
+          "location": "Luxembourg"
+        },
+        "raw_signals": [
+          "weather"
+        ],
+        "original_text": "Raju, what is the weather in Luxembourg?"
+      }
+    },
+    {
+      "id": "speaker_2",
+      "status": "REJECTED",
+      "transcript": "",
+      "wakeword": false,
+      "wakeword_confidence": 0.0,
+      "wakeword_phrase": null,
+      "type": "UNKNOWN",
+      "type_confidence": 0.0,
+      "identity": "Sanchit",
+      "identity_confidence": 0.7236,
+      "known_user": true,
+      "start_time": 0.0,
+      "intent_result": {
+        "domain": "UNKNOWN",
+        "polarity": "NEUTRAL",
+        "confidence": 0.0,
+        "entities": {},
+        "raw_signals": [],
+        "original_text": ""
+      }
+    }
+  ],
+  "wakeword_count": 1,
+  "command_count": 1,
+  "conflict": false,
+  "conflict_pair": null,
+  "route": "EXECUTE",
+  "arbitration": {
+    "winner": "speaker_1",
+    "route": "EXECUTE",
+    "reason": "Hemang Seth issued the only wakeword command. Priority: 0.92.",
+    "speakers": [
+      {
+        "id": "speaker_1",
+        "identity": "Hemang Seth",
+        "identity_confidence": 0.7904,
+        "known_user": true,
+        "wakeword": true,
+        "wakeword_confidence": 1.0,
+        "transcript": "Raju, what is the weather in Luxembourg?",
+        "type": "COMMAND",
+        "separation_quality": 1.0,
+        "identity_note": "",
+        "start_time": 0.0,
+        "priority": 0.9162,
+        "intent": "WEATHER"
+      },
+      {
+        "id": "speaker_2",
+        "identity": "Sanchit",
+        "identity_confidence": 0.7236,
+        "known_user": true,
+        "wakeword": false,
+        "wakeword_confidence": 0.0,
+        "transcript": "",
+        "type": "UNKNOWN",
+        "separation_quality": 1.0,
+        "identity_note": "",
+        "start_time": 0.0,
+        "priority": 0.4894,
+        "intent": null
+      }
+    ]
+  }
+}

@@ -1,29 +1,29 @@
 {
   "schema_version": "1.0",
-  "timestamp": "2026-06-14T16:44:44.394080",
-  "session_dir": "outputs/20260614_164425",
+  "timestamp": "2026-06-14T16:08:26.724717",
+  "session_dir": "outputs/20260614_160814",
   "scene": {
-    "drs_mode": "B",
-    "speaker_count": 2,
-    "complexity": 0.627,
-    "noise_level": 0.089,
-    "simul_speech": 1.0
+    "drs_mode": "A",
+    "speaker_count": 1,
+    "complexity": 0.107,
+    "noise_level": 0.356,
+    "simul_speech": 0.0
   },
   "active_command": {
     "speaker_id": "speaker_1",
     "identity": "Hemang Seth",
     "known_user": true,
-    "transcript": "Raju, what is the weather in Luxembourg?",
+    "transcript": "Raju tell me what's the weather for today.",
     "domain": "WEATHER",
     "polarity": "POSITIVE",
     "intent_confidence": 0.55,
     "entities": {
-      "location": "Luxembourg"
+      "time_reference": "today"
     },
     "wakeword": true,
     "wakeword_phrase": "raju",
     "wakeword_confidence": 1.0,
-    "priority_score": 0.9162
+    "priority_score": 0.9249
   },
   "route": "EXECUTE",
   "route_reason": "Hemang Seth issued the only wakeword command. Priority: 0.92.",
@@ -33,7 +33,7 @@
       "identity": "Hemang Seth",
       "known_user": true,
       "status": "READY",
-      "transcript": "Raju, what is the weather in Luxembourg?",
+      "transcript": "Raju tell me what's the weather for today.",
       "wakeword": true,
       "wakeword_phrase": "raju",
       "wakeword_confidence": 1.0,
@@ -41,30 +41,13 @@
       "polarity": "POSITIVE",
       "intent_confidence": 0.55,
       "entities": {
-        "location": "Luxembourg"
+        "time_reference": "today"
       },
       "raw_signals": [
         "weather"
       ],
-      "priority_score": 0.9162,
-      "identity_confidence": 0.7904
-    },
-    {
-      "speaker_id": "speaker_2",
-      "identity": "Sanchit",
-      "known_user": true,
-      "status": "REJECTED",
-      "transcript": "",
-      "wakeword": false,
-      "wakeword_phrase": null,
-      "wakeword_confidence": 0.0,
-      "domain": "UNKNOWN",
-      "polarity": "NEUTRAL",
-      "intent_confidence": 0.0,
-      "entities": {},
-      "raw_signals": [],
-      "priority_score": 0.4894,
-      "identity_confidence": 0.7236
+      "priority_score": 0.9249,
+      "identity_confidence": 0.8122
     }
   ],
   "conflict": {
@@ -76,14 +59,14 @@
   "clarification_prompt": null,
   "llm_prompt": {
     "system": "You are The Canary, a smart home voice assistant.\nYou have received and analysed a voice command from a household session.\nYour job is to act on the command described below, respond naturally,\nand if clarification is needed, ask concisely.\n\nRules:\n- Always address the user by their enrolled name if known.\n- If the command is ambiguous or in conflict, ask a single clarifying question.\n- If the domain is UNKNOWN, politely acknowledge you did not understand.\n- Keep your spoken response short (1-3 sentences max).\n- Never mention internal system fields (priority scores, speaker IDs, etc.).",
-    "user": "Command received from Hemang Seth.\nTranscript: \"Raju, what is the weather in Luxembourg?\"\nDomain: WEATHER  |  Polarity: POSITIVE\n  Extracted details: location='Luxembourg'.\nAction: Hemang Seth wants the system to handle a WEATHER request.\nGenerate a spoken response to this command."
+    "user": "Command received from Hemang Seth.\nTranscript: \"Raju tell me what's the weather for today.\"\nDomain: WEATHER  |  Polarity: POSITIVE\n  Extracted details: time_reference='today'.\nAction: Hemang Seth wants the system to handle a WEATHER request.\nGenerate a spoken response to this command."
   },
   "priority_engine_log": [
     "=== Priority Engine Trace ===",
-    "Total speakers in session: 2",
+    "Total speakers in session: 1",
     "Speakers with wakeword+command: 1",
     "Rule 1 FIRED — Single wakeword command from Hemang Seth.",
-    "  Priority: 0.9162",
+    "  Priority: 0.9249",
     "  Route: EXECUTE"
   ]
 }
