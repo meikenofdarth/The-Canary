@@ -333,7 +333,7 @@ def _check_quality(audio: np.ndarray) -> tuple:
 
 def run_enrollment(name: str) -> None:
     """Interactively record 3 scripts and enroll the speaker."""
-    from voice_computation.enroll import enroll_speaker, get_profile, list_enrolled
+    from computation.voice.enroll import enroll_speaker, get_profile, list_enrolled
 
     _cls()
     _banner()
@@ -365,11 +365,105 @@ def run_enrollment(name: str) -> None:
     _run_recording_flow(name, mode="replace")
 
 
+def _extract_hints_from_recordings(name: str) -> dict:
+    """
+    Simple regex scan over any transcripts embedded in the recordings folder.
+    Looks for phrases like 'my city is X', 'I live in X', 'I like X music'.
+    Returns a partial preferences dict (only keys that were found).
+    """
+    import re
+    hints: dict = {}
+
+    rec_dir = Path(__file__).parent / "Voices" / name / "recordings"
+    if not rec_dir.exists():
+        return hints
+
+    # We look in any .txt transcript files that might live alongside the wavs
+    for txt_file in rec_dir.glob("*.txt"):
+        try:
+            text = txt_file.read_text(encoding="utf-8", errors="ignore").lower()
+        except OSError:
+            continue
+
+        # City hint
+        m = re.search(r"(?:my city is|i live in|i am from|from)\s+([A-Za-z\s]+?)(?:\.|,|$)", text)
+        if m and "city" not in hints:
+            hints["city"] = m.group(1).strip().title()
+
+        # Music genre hint
+        m = re.search(r"i (?:like|love|enjoy|prefer)\s+([A-Za-z\-]+)\s+music", text)
+        if m and "favorite_genre" not in hints:
+            hints["favorite_genre"] = m.group(1).strip().title()
+
+    return hints
+
+
+def _ask_personalization(name: str, profile: dict) -> None:
+    """
+    Ask 3 quick personalization questions and persist the answers to database.canary_db.
+    Optionally pre-fills defaults from recording transcript hints.
+    """
+    import sys
+    sys.path.insert(0, str(Path(__file__).parent))
+    import canary_db
+
+    # Try to pre-fill from any transcript hints in recordings
+    hints = _extract_hints_from_recordings(name)
+
+    _rule()
+    print()
+    print("  Almost done! A few quick personalization questions:")
+    print()
+    print("  ─────────────────────────────────────────────────────────────────")
+
+    # Q1 — city
+    default_city = hints.get("city", "Bengaluru")
+    city_input = input(
+        f"  1. What city are you in? (used for weather & news)  [{default_city}]\n"
+        "     > "
+    ).strip()
+    city = city_input if city_input else default_city
+
+    # Q2 — news country / region
+    default_news = "India"
+    news_input = input(
+        f"\n  2. What's your preferred news region? (e.g. India, US, UK, global)  [{default_news}]\n"
+        "     > "
+    ).strip()
+    news_country = news_input if news_input else default_news
+
+    # Q3 — music genre
+    default_genre = hints.get("favorite_genre", "Pop")
+    genre_input = input(
+        f"\n  3. What's your favourite music genre?  (e.g. Pop, Rock, Jazz, Hip-Hop, Classical)  [{default_genre}]\n"
+        "     > "
+    ).strip()
+    favorite_genre = genre_input if genre_input else default_genre
+
+    print("  ─────────────────────────────────────────────────────────────────")
+    print()
+
+    prefs = {
+        "city":           city,
+        "news_country":   news_country,
+        "favorite_genre": favorite_genre,
+    }
+
+    try:
+        from database.canary_db import update_preferences
+        update_preferences(name, prefs)
+        _ok(f"Preferences saved: city={city}, news={news_country}, genre={favorite_genre}")
+    except Exception as e:
+        _warn(f"Could not save preferences to DB: {e}")
+
+    print()
+
+
 def _run_recording_flow(name: str, mode: str = "replace") -> None:
     """Record 3 scripts, save them, then call enroll_speaker."""
-    from voice_computation.enroll import enroll_speaker, _recordings_dir, _speaker_dir
+    from computation.voice.enroll import enroll_speaker, _recordings_dir, _speaker_dir
 
-    voices_root = Path(__file__).parent / "Voices"
+    voices_root = Path(__file__).parent / "database" / "Voices"
     spk_dir     = voices_root / name
     spk_dir.mkdir(parents=True, exist_ok=True)
     rec_dir = spk_dir / "recordings"
@@ -453,6 +547,10 @@ def _run_recording_flow(name: str, mode: str = "replace") -> None:
     print(f"  Speech rate : {profile['speech_rate']:.2f} syl/sec")
     print(f"  Profile     : Voices/{name}/profile.json")
     print()
+
+    # ── Personalization questions ──────────────────────────────────────────
+    _ask_personalization(name, profile)
+
     print("  Run  python3 run_canary.py  to use speaker identification.")
     print()
 
@@ -484,7 +582,7 @@ Examples:
 
     # ── List mode ─────────────────────────────────────────────────────────
     if args.list:
-        from voice_computation.enroll import list_enrolled, get_profile
+        from computation.voice.enroll import list_enrolled, get_profile
         _banner()
         enrolled = list_enrolled()
         if not enrolled:
@@ -505,7 +603,7 @@ Examples:
 
     # ── Rebuild mode ──────────────────────────────────────────────────────
     if args.rebuild:
-        from voice_computation.enroll import rebuild_all_profiles
+        from computation.voice.enroll import rebuild_all_profiles
         _banner()
         print("  Rebuilding all speaker profiles from existing recordings ...\n")
         with warnings.catch_warnings():

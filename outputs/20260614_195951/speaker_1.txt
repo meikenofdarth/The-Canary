@@ -1,0 +1,8 @@
+[Language: en]
+[Status: ✓  READY — meaningful speech detected]
+[RMS: -20.1 dBFS | Speech ratio: 62%]
+
+ammi, what is the weather in luxembourg?
+
+--- Segments ---
+[0.00s → 5.00s] Ammi, what is the weather in Luxembourg?

@@ -1,0 +1,101 @@
+{
+  "timestamp": "2026-06-14T21:39:32.802226",
+  "session_dir": "outputs/20260614_213916",
+  "drs_mode": "B",
+  "scene": {
+    "speaker_count": 2,
+    "complexity": 0.671,
+    "noise_level": 0.236,
+    "simul_speech": 1.0
+  },
+  "speakers": [
+    {
+      "id": "speaker_1",
+      "status": "READY",
+      "transcript": "amy, what is the better in delhi?",
+      "wakeword": true,
+      "wakeword_confidence": 1.0,
+      "wakeword_phrase": "amy",
+      "type": "COMMAND",
+      "type_confidence": 0.95,
+      "identity": "Hemang Seth",
+      "identity_confidence": 0.745,
+      "known_user": true,
+      "start_time": 0.0,
+      "intent_result": {
+        "domain": "UNKNOWN",
+        "polarity": "NEUTRAL",
+        "confidence": 0.0,
+        "entities": {},
+        "raw_signals": [],
+        "original_text": "amy, what is the better in delhi?"
+      }
+    },
+    {
+      "id": "speaker_2",
+      "status": "READY",
+      "transcript": "kemi, what is the weather in the?",
+      "wakeword": false,
+      "wakeword_confidence": 0.0,
+      "wakeword_phrase": null,
+      "type": "QUESTION",
+      "type_confidence": 0.8,
+      "identity": "Hemang Seth",
+      "identity_confidence": 0.7729,
+      "known_user": true,
+      "start_time": 0.0,
+      "intent_result": {
+        "domain": "WEATHER",
+        "polarity": "POSITIVE",
+        "confidence": 0.55,
+        "entities": {},
+        "raw_signals": [
+          "weather"
+        ],
+        "original_text": "kemi, what is the weather in the?"
+      }
+    }
+  ],
+  "wakeword_count": 1,
+  "command_count": 1,
+  "conflict": false,
+  "conflict_pair": null,
+  "route": "EXECUTE",
+  "arbitration": {
+    "winner": "speaker_1",
+    "route": "EXECUTE",
+    "reason": "Hemang Seth issued the only wakeword command. Priority: 0.90.",
+    "speakers": [
+      {
+        "id": "speaker_1",
+        "identity": "Hemang Seth",
+        "identity_confidence": 0.745,
+        "known_user": true,
+        "wakeword": true,
+        "wakeword_confidence": 1.0,
+        "transcript": "amy, what is the better in delhi?",
+        "type": "COMMAND",
+        "separation_quality": 1.0,
+        "identity_note": "",
+        "start_time": 0.0,
+        "priority": 0.898,
+        "intent": "GREETING"
+      },
+      {
+        "id": "speaker_2",
+        "identity": "Hemang Seth",
+        "identity_confidence": 0.7729,
+        "known_user": true,
+        "wakeword": false,
+        "wakeword_confidence": 0.0,
+        "transcript": "kemi, what is the weather in the?",
+        "type": "QUESTION",
+        "separation_quality": 1.0,
+        "identity_note": "",
+        "start_time": 0.0,
+        "priority": 0.5092,
+        "intent": "WEATHER"
+      }
+    ]
+  }
+}

@@ -26,10 +26,7 @@ MODEL_CACHE = "pretrained_models"
 #  RECORD
 # ─────────────────────────────────────────────────────────────────────────────
 def record(sr=SAMPLE_RATE):
-    import sys
-    from pathlib import Path
-    sys.path.insert(0, str(Path(__file__).parent / "separation-filtering"))
-    from vad_segmenter import record_until_silence
+    from computation.audio.vad_segmenter import record_until_silence
     raw = record_until_silence(
         max_duration    = 15.0,
         silence_timeout = 1.8,
@@ -616,8 +613,7 @@ def main():
     # Estimate speaker count using the windowed speaker count estimator
     print("● Estimating speaker count ...")
     try:
-        sys.path.insert(0, str(Path(__file__).parent / "separation-filtering"))
-        from speaker_counter import SpeakerCountEstimator
+        from computation.audio.speaker_counter import SpeakerCountEstimator
         estimator = SpeakerCountEstimator(sample_rate=sr, max_speakers=3)
         est_spk = estimator.estimate(raw)
         print(f"  Estimated speakers in scene: Caliberating....")
@@ -667,7 +663,7 @@ def main():
             saved.append(fname)
 
     print("\n● Transcribing speech to text ...")
-    from asr.transcribe import transcribe_and_save, pre_screen
+    from computation.audio.transcribe import transcribe_and_save, pre_screen
     ready_speakers = []
     for fname in saved:
         wav_p = out_dir / fname
@@ -703,7 +699,7 @@ def main():
     # Never crashes the main pipeline — wrapped in try/except.
     voice_ids = {}
     try:
-        from voice_computation.ranker import identify_speakers, print_result
+        from computation.voice.ranker import identify_speakers, print_result
         print("\n● Identifying speakers ...")
         voice_ids = identify_speakers(saved, out_dir, raw_mix=raw, sr=sr, overlap=overlap_prob)
         print()
@@ -747,7 +743,7 @@ def main():
 
     # ── Context Engine (shadow — never crashes the main pipeline) ─────────
     try:
-        from context_engine import build_context
+        from computation.intelligence import build_context
         build_context(out_dir, drs, n_spk, voice_ids=voice_ids)
     except Exception as _ctx_err:
         print(f"  [Context Engine] skipped — {_ctx_err}")

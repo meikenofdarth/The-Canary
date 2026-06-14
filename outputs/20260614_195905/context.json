@@ -1,0 +1,103 @@
+{
+  "timestamp": "2026-06-14T19:59:19.377126",
+  "session_dir": "outputs/20260614_195905",
+  "drs_mode": "B",
+  "scene": {
+    "speaker_count": 2,
+    "complexity": 0.6,
+    "noise_level": 0.0,
+    "simul_speech": 1.0
+  },
+  "speakers": [
+    {
+      "id": "speaker_1",
+      "status": "READY",
+      "transcript": "ami, what is the weather in bengal?",
+      "wakeword": true,
+      "wakeword_confidence": 0.9667,
+      "wakeword_phrase": "~ami",
+      "type": "COMMAND",
+      "type_confidence": 0.95,
+      "identity": "Hemang Seth",
+      "identity_confidence": 0.7176,
+      "known_user": true,
+      "start_time": 0.0,
+      "intent_result": {
+        "domain": "WEATHER",
+        "polarity": "POSITIVE",
+        "confidence": 0.55,
+        "entities": {},
+        "raw_signals": [
+          "weather"
+        ],
+        "original_text": "ami, what is the weather in bengal?"
+      }
+    },
+    {
+      "id": "speaker_2",
+      "status": "READY",
+      "transcript": "ammi, what is the weather in bangalore?",
+      "wakeword": true,
+      "wakeword_confidence": 0.725,
+      "wakeword_phrase": "~ammi",
+      "type": "COMMAND",
+      "type_confidence": 0.95,
+      "identity": "Hemang Seth",
+      "identity_confidence": 0.6983,
+      "known_user": true,
+      "start_time": 0.0,
+      "intent_result": {
+        "domain": "WEATHER",
+        "polarity": "POSITIVE",
+        "confidence": 0.55,
+        "entities": {},
+        "raw_signals": [
+          "weather"
+        ],
+        "original_text": "ammi, what is the weather in bangalore?"
+      }
+    }
+  ],
+  "wakeword_count": 2,
+  "command_count": 2,
+  "conflict": false,
+  "conflict_pair": null,
+  "route": "EXECUTE",
+  "arbitration": {
+    "winner": "speaker_1",
+    "route": "EXECUTE",
+    "reason": "All speakers share the same intent (WEATHER). Executing for highest-priority speaker (Hemang Seth).",
+    "speakers": [
+      {
+        "id": "speaker_1",
+        "identity": "Hemang Seth",
+        "identity_confidence": 0.7176,
+        "known_user": true,
+        "wakeword": true,
+        "wakeword_confidence": 0.9667,
+        "transcript": "ami, what is the weather in bengal?",
+        "type": "COMMAND",
+        "separation_quality": 1.0,
+        "identity_note": "",
+        "start_time": 0.0,
+        "priority": 0.8737,
+        "intent": "WEATHER"
+      },
+      {
+        "id": "speaker_2",
+        "identity": "Hemang Seth",
+        "identity_confidence": 0.6983,
+        "known_user": true,
+        "wakeword": true,
+        "wakeword_confidence": 0.725,
+        "transcript": "ammi, what is the weather in bangalore?",
+        "type": "COMMAND",
+        "separation_quality": 1.0,
+        "identity_note": "",
+        "start_time": 0.0,
+        "priority": 0.7693,
+        "intent": "WEATHER"
+      }
+    ]
+  }
+}

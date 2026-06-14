@@ -1,0 +1,8 @@
+[Language: hi]
+[Status: ✓  READY — meaningful speech detected]
+[RMS: -21.9 dBFS | Speech ratio: 52%]
+
+Ammi, what is the weather in Bengaluru?
+
+--- Segments ---
+[0.00s → 4.00s] Ammi, what is the weather in Bengaluru?

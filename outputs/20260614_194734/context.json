@@ -1,0 +1,64 @@
+{
+  "timestamp": "2026-06-14T19:47:47.402148",
+  "session_dir": "outputs/20260614_194734",
+  "drs_mode": "A",
+  "scene": {
+    "speaker_count": 1,
+    "complexity": 0.028,
+    "noise_level": 0.093,
+    "simul_speech": 0.0
+  },
+  "speakers": [
+    {
+      "id": "speaker_1",
+      "status": "READY",
+      "transcript": "amy, what is the weather in bengaluru?",
+      "wakeword": true,
+      "wakeword_confidence": 1.0,
+      "wakeword_phrase": "amy",
+      "type": "COMMAND",
+      "type_confidence": 0.95,
+      "identity": "Hemang Seth",
+      "identity_confidence": 0.8525,
+      "known_user": true,
+      "start_time": 0.0,
+      "intent_result": {
+        "domain": "WEATHER",
+        "polarity": "POSITIVE",
+        "confidence": 0.55,
+        "entities": {},
+        "raw_signals": [
+          "weather"
+        ],
+        "original_text": "amy, what is the weather in bengaluru?"
+      }
+    }
+  ],
+  "wakeword_count": 1,
+  "command_count": 1,
+  "conflict": false,
+  "conflict_pair": null,
+  "route": "EXECUTE",
+  "arbitration": {
+    "winner": "speaker_1",
+    "route": "EXECUTE",
+    "reason": "Hemang Seth issued the only wakeword command. Priority: 0.94.",
+    "speakers": [
+      {
+        "id": "speaker_1",
+        "identity": "Hemang Seth",
+        "identity_confidence": 0.8525,
+        "known_user": true,
+        "wakeword": true,
+        "wakeword_confidence": 1.0,
+        "transcript": "amy, what is the weather in bengaluru?",
+        "type": "COMMAND",
+        "separation_quality": 1.0,
+        "identity_note": "",
+        "start_time": 0.0,
+        "priority": 0.941,
+        "intent": "WEATHER"
+      }
+    ]
+  }
+}

@@ -50,7 +50,7 @@ os.environ["HF_HUB_DISABLE_IMPLICIT_TOKEN"] = "1"
 
 # ── Paths ────────────────────────────────────────────────────────────────────
 _ROOT        = Path(__file__).parent
-_WAKEWORD_DIR = _ROOT / "wakeword"
+_WAKEWORD_DIR = _ROOT / "computation" / "wakeword"
 _BINARY      = _WAKEWORD_DIR / "build" / "wakeword_matcher"
 _CONFIG_PATH = _WAKEWORD_DIR / "wakeword_config.json"
 
@@ -359,7 +359,7 @@ def run_wakeword_enrollment(n_recordings: int = 3,
     print("     The system uses majority vote to determine the word.")
     _rule()
 
-    tmp_dir = _ROOT / "wakeword" / "_recordings"
+    tmp_dir = _ROOT / "computation" / "wakeword" / "_recordings"
     tmp_dir.mkdir(parents=True, exist_ok=True)
 
     transcriptions: list[str] = []

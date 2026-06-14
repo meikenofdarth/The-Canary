@@ -1,40 +1,57 @@
 {
   "schema_version": "1.0",
-  "timestamp": "2026-06-14T21:40:16.451271",
-  "session_dir": "outputs/20260614_214004",
+  "timestamp": "2026-06-14T21:39:32.802428",
+  "session_dir": "outputs/20260614_213916",
   "scene": {
-    "drs_mode": "A",
-    "speaker_count": 1,
-    "complexity": 0.056,
-    "noise_level": 0.187,
-    "simul_speech": 0.0
+    "drs_mode": "B",
+    "speaker_count": 2,
+    "complexity": 0.671,
+    "noise_level": 0.236,
+    "simul_speech": 1.0
   },
   "active_command": {
     "speaker_id": "speaker_1",
     "identity": "Hemang Seth",
     "known_user": true,
-    "transcript": "amy, what is the weather in my city?",
-    "domain": "WEATHER",
-    "polarity": "POSITIVE",
-    "intent_confidence": 0.55,
+    "transcript": "amy, what is the better in delhi?",
+    "domain": "UNKNOWN",
+    "polarity": "NEUTRAL",
+    "intent_confidence": 0.0,
     "entities": {},
     "wakeword": true,
     "wakeword_phrase": "amy",
     "wakeword_confidence": 1.0,
-    "priority_score": 0.95
+    "priority_score": 0.898
   },
   "route": "EXECUTE",
-  "route_reason": "Hemang Seth issued the only wakeword command. Priority: 0.95.",
+  "route_reason": "Hemang Seth issued the only wakeword command. Priority: 0.90.",
   "all_speakers": [
     {
       "speaker_id": "speaker_1",
       "identity": "Hemang Seth",
       "known_user": true,
       "status": "READY",
-      "transcript": "amy, what is the weather in my city?",
+      "transcript": "amy, what is the better in delhi?",
       "wakeword": true,
       "wakeword_phrase": "amy",
       "wakeword_confidence": 1.0,
+      "domain": "UNKNOWN",
+      "polarity": "NEUTRAL",
+      "intent_confidence": 0.0,
+      "entities": {},
+      "raw_signals": [],
+      "priority_score": 0.898,
+      "identity_confidence": 0.745
+    },
+    {
+      "speaker_id": "speaker_2",
+      "identity": "Hemang Seth",
+      "known_user": true,
+      "status": "READY",
+      "transcript": "kemi, what is the weather in the?",
+      "wakeword": false,
+      "wakeword_phrase": null,
+      "wakeword_confidence": 0.0,
       "domain": "WEATHER",
       "polarity": "POSITIVE",
       "intent_confidence": 0.55,
@@ -42,8 +59,8 @@
       "raw_signals": [
         "weather"
       ],
-      "priority_score": 0.95,
-      "identity_confidence": 0.8749
+      "priority_score": 0.5092,
+      "identity_confidence": 0.7729
     }
   ],
   "conflict": {
@@ -55,14 +72,14 @@
   "clarification_prompt": null,
   "llm_prompt": {
     "system": "You are The Canary, a smart home voice assistant.\nYou have received and analysed a voice command from a household session.\nYour job is to act on the command described below, respond naturally,\nand if clarification is needed, ask concisely.\n\nRules:\n- Always address the user by their enrolled name if known.\n- If the command is ambiguous or in conflict, ask a single clarifying question.\n- If the domain is UNKNOWN, politely acknowledge you did not understand.\n- Keep your spoken response short (1-3 sentences max).\n- Never mention internal system fields (priority scores, speaker IDs, etc.).",
-    "user": "Command received from Hemang Seth.\nTranscript: \"amy, what is the weather in my city?\"\nDomain: WEATHER  |  Polarity: POSITIVE\n\nAction: Hemang Seth wants the system to handle a WEATHER request.\nGenerate a spoken response to this command."
+    "user": "Command received from Hemang Seth.\nTranscript: \"amy, what is the better in delhi?\"\nDomain: UNKNOWN  |  Polarity: NEUTRAL\n\nAction: Hemang Seth issued a UNKNOWN command with neutral polarity.\nGenerate a spoken response to this command."
   },
   "priority_engine_log": [
     "=== Priority Engine Trace ===",
-    "Total speakers in session: 1",
+    "Total speakers in session: 2",
     "Speakers with wakeword+command: 1",
     "Rule 1 FIRED — Single wakeword command from Hemang Seth.",
-    "  Priority: 0.9500",
+    "  Priority: 0.8980",
     "  Route: EXECUTE"
   ]
 }

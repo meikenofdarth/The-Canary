@@ -1,0 +1,5 @@
+[Language: ur]
+[Status: ✗  REJECTED — Whisper confidence too low (noise/artifacts)]
+[RMS: -29.1 dBFS | Speech ratio: 67%]
+
+(Whisper confidence too low — stream is mostly noise/artifacts)

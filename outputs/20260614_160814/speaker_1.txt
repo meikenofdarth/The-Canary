@@ -1,8 +1,0 @@
-[Language: en]
-[Status: ✓  READY — meaningful speech detected]
-[RMS: -22.7 dBFS | Speech ratio: 44%]
-
-Raju tell me what's the weather for today.
-
---- Segments ---
-[0.00s → 3.20s] Raju tell me what's the weather for today.

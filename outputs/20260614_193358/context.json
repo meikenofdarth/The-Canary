@@ -1,0 +1,66 @@
+{
+  "timestamp": "2026-06-14T19:34:12.778543",
+  "session_dir": "outputs/20260614_193358",
+  "drs_mode": "A",
+  "scene": {
+    "speaker_count": 1,
+    "complexity": 0.081,
+    "noise_level": 0.271,
+    "simul_speech": 0.0
+  },
+  "speakers": [
+    {
+      "id": "speaker_1",
+      "status": "READY",
+      "transcript": "Ammi, what is the weather in Bengaluru?",
+      "wakeword": false,
+      "wakeword_confidence": 0.0,
+      "wakeword_phrase": null,
+      "type": "QUESTION",
+      "type_confidence": 0.8,
+      "identity": "Hemang Seth",
+      "identity_confidence": 0.865,
+      "known_user": true,
+      "start_time": 0.0,
+      "intent_result": {
+        "domain": "WEATHER",
+        "polarity": "POSITIVE",
+        "confidence": 0.55,
+        "entities": {
+          "location": "Bengaluru"
+        },
+        "raw_signals": [
+          "weather"
+        ],
+        "original_text": "Ammi, what is the weather in Bengaluru?"
+      }
+    }
+  ],
+  "wakeword_count": 0,
+  "command_count": 0,
+  "conflict": false,
+  "conflict_pair": null,
+  "route": "IGNORE",
+  "arbitration": {
+    "winner": null,
+    "route": "IGNORE",
+    "reason": "No wakeword commands detected.",
+    "speakers": [
+      {
+        "id": "speaker_1",
+        "identity": "Hemang Seth",
+        "identity_confidence": 0.865,
+        "known_user": true,
+        "wakeword": false,
+        "wakeword_confidence": 0.0,
+        "transcript": "Ammi, what is the weather in Bengaluru?",
+        "type": "QUESTION",
+        "separation_quality": 1.0,
+        "identity_note": "",
+        "start_time": 0.0,
+        "priority": 0.546,
+        "intent": "WEATHER"
+      }
+    ]
+  }
+}

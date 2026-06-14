@@ -1,0 +1,8 @@
+[Language: en]
+[Status: ✓  READY — meaningful speech detected]
+[RMS: -24.6 dBFS | Speech ratio: 73%]
+
+canary, what is the weather in bengaluru?
+
+--- Segments ---
+[0.00s → 7.00s] Canary, what is the weather in Bengaluru?

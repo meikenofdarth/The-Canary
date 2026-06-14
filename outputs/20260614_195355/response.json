@@ -1,40 +1,40 @@
 {
   "schema_version": "1.0",
-  "timestamp": "2026-06-14T21:40:16.451271",
-  "session_dir": "outputs/20260614_214004",
+  "timestamp": "2026-06-14T19:54:08.209442",
+  "session_dir": "outputs/20260614_195355",
   "scene": {
     "drs_mode": "A",
     "speaker_count": 1,
-    "complexity": 0.056,
-    "noise_level": 0.187,
+    "complexity": 0.05,
+    "noise_level": 0.168,
     "simul_speech": 0.0
   },
   "active_command": {
     "speaker_id": "speaker_1",
     "identity": "Hemang Seth",
     "known_user": true,
-    "transcript": "amy, what is the weather in my city?",
+    "transcript": "ammi, what is the weather in bengaluru?",
     "domain": "WEATHER",
     "polarity": "POSITIVE",
     "intent_confidence": 0.55,
     "entities": {},
     "wakeword": true,
-    "wakeword_phrase": "amy",
-    "wakeword_confidence": 1.0,
-    "priority_score": 0.95
+    "wakeword_phrase": "~ammi",
+    "wakeword_confidence": 0.725,
+    "priority_score": 0.8297
   },
   "route": "EXECUTE",
-  "route_reason": "Hemang Seth issued the only wakeword command. Priority: 0.95.",
+  "route_reason": "Hemang Seth issued the only wakeword command. Priority: 0.83.",
   "all_speakers": [
     {
       "speaker_id": "speaker_1",
       "identity": "Hemang Seth",
       "known_user": true,
       "status": "READY",
-      "transcript": "amy, what is the weather in my city?",
+      "transcript": "ammi, what is the weather in bengaluru?",
       "wakeword": true,
-      "wakeword_phrase": "amy",
-      "wakeword_confidence": 1.0,
+      "wakeword_phrase": "~ammi",
+      "wakeword_confidence": 0.725,
       "domain": "WEATHER",
       "polarity": "POSITIVE",
       "intent_confidence": 0.55,
@@ -42,8 +42,8 @@
       "raw_signals": [
         "weather"
       ],
-      "priority_score": 0.95,
-      "identity_confidence": 0.8749
+      "priority_score": 0.8297,
+      "identity_confidence": 0.8492
     }
   ],
   "conflict": {
@@ -55,14 +55,14 @@
   "clarification_prompt": null,
   "llm_prompt": {
     "system": "You are The Canary, a smart home voice assistant.\nYou have received and analysed a voice command from a household session.\nYour job is to act on the command described below, respond naturally,\nand if clarification is needed, ask concisely.\n\nRules:\n- Always address the user by their enrolled name if known.\n- If the command is ambiguous or in conflict, ask a single clarifying question.\n- If the domain is UNKNOWN, politely acknowledge you did not understand.\n- Keep your spoken response short (1-3 sentences max).\n- Never mention internal system fields (priority scores, speaker IDs, etc.).",
-    "user": "Command received from Hemang Seth.\nTranscript: \"amy, what is the weather in my city?\"\nDomain: WEATHER  |  Polarity: POSITIVE\n\nAction: Hemang Seth wants the system to handle a WEATHER request.\nGenerate a spoken response to this command."
+    "user": "Command received from Hemang Seth.\nTranscript: \"ammi, what is the weather in bengaluru?\"\nDomain: WEATHER  |  Polarity: POSITIVE\n\nAction: Hemang Seth wants the system to handle a WEATHER request.\nGenerate a spoken response to this command."
   },
   "priority_engine_log": [
     "=== Priority Engine Trace ===",
     "Total speakers in session: 1",
     "Speakers with wakeword+command: 1",
     "Rule 1 FIRED — Single wakeword command from Hemang Seth.",
-    "  Priority: 0.9500",
+    "  Priority: 0.8297",
     "  Route: EXECUTE"
   ]
 }

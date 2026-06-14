@@ -31,6 +31,7 @@ outputs/             # per-run separated audio + transcript files
 20*/                 # any leftover root-level timestamped folders
 pretrained_models/   # downloaded SepFormer / model weights
 /tmp/
+canary.db            # SQLite user profile database (local only)
 
 # Jupyter
 .ipynb_checkpoints/

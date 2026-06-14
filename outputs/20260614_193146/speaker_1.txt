@@ -1,0 +1,8 @@
+[Language: en]
+[Status: ✓  READY — meaningful speech detected]
+[RMS: -22.1 dBFS | Speech ratio: 34%]
+
+Don't play any music.
+
+--- Segments ---
+[0.00s → 2.00s] Don't play any music.

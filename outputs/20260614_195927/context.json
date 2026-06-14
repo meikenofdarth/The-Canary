@@ -1,0 +1,103 @@
+{
+  "timestamp": "2026-06-14T19:59:41.742260",
+  "session_dir": "outputs/20260614_195927",
+  "drs_mode": "B",
+  "scene": {
+    "speaker_count": 2,
+    "complexity": 0.6,
+    "noise_level": 0.0,
+    "simul_speech": 1.0
+  },
+  "speakers": [
+    {
+      "id": "speaker_1",
+      "status": "READY",
+      "transcript": "amey, what is the weather in luxembourg?",
+      "wakeword": true,
+      "wakeword_confidence": 0.75,
+      "wakeword_phrase": "~amey",
+      "type": "COMMAND",
+      "type_confidence": 0.95,
+      "identity": "Hemang Seth",
+      "identity_confidence": 0.7143,
+      "known_user": true,
+      "start_time": 0.0,
+      "intent_result": {
+        "domain": "WEATHER",
+        "polarity": "POSITIVE",
+        "confidence": 0.55,
+        "entities": {},
+        "raw_signals": [
+          "weather"
+        ],
+        "original_text": "amey, what is the weather in luxembourg?"
+      }
+    },
+    {
+      "id": "speaker_2",
+      "status": "READY",
+      "transcript": "amee what is the weather in a luxembourg?",
+      "wakeword": true,
+      "wakeword_confidence": 0.7125,
+      "wakeword_phrase": "~amee",
+      "type": "COMMAND",
+      "type_confidence": 0.95,
+      "identity": "Hemang Seth",
+      "identity_confidence": 0.7676,
+      "known_user": true,
+      "start_time": 0.0,
+      "intent_result": {
+        "domain": "WEATHER",
+        "polarity": "POSITIVE",
+        "confidence": 0.55,
+        "entities": {},
+        "raw_signals": [
+          "weather"
+        ],
+        "original_text": "amee what is the weather in a luxembourg?"
+      }
+    }
+  ],
+  "wakeword_count": 2,
+  "command_count": 2,
+  "conflict": false,
+  "conflict_pair": null,
+  "route": "EXECUTE",
+  "arbitration": {
+    "winner": "speaker_2",
+    "route": "EXECUTE",
+    "reason": "All speakers share the same intent (WEATHER). Executing for highest-priority speaker (Hemang Seth).",
+    "speakers": [
+      {
+        "id": "speaker_1",
+        "identity": "Hemang Seth",
+        "identity_confidence": 0.7143,
+        "known_user": true,
+        "wakeword": true,
+        "wakeword_confidence": 0.75,
+        "transcript": "amey, what is the weather in luxembourg?",
+        "type": "COMMAND",
+        "separation_quality": 1.0,
+        "identity_note": "",
+        "start_time": 0.0,
+        "priority": 0.7857,
+        "intent": "WEATHER"
+      },
+      {
+        "id": "speaker_2",
+        "identity": "Hemang Seth",
+        "identity_confidence": 0.7676,
+        "known_user": true,
+        "wakeword": true,
+        "wakeword_confidence": 0.7125,
+        "transcript": "amee what is the weather in a luxembourg?",
+        "type": "COMMAND",
+        "separation_quality": 1.0,
+        "identity_note": "",
+        "start_time": 0.0,
+        "priority": 0.792,
+        "intent": "WEATHER"
+      }
+    ]
+  }
+}

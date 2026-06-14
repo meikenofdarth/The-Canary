@@ -1,0 +1,8 @@
+[Language: en]
+[Status: ✓  READY — meaningful speech detected]
+[RMS: -22.0 dBFS | Speech ratio: 55%]
+
+kemi, what is the weather in the?
+
+--- Segments ---
+[0.00s → 4.48s] Kemi, what is the weather in the?
