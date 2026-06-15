@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>The Canary — DNA Wave</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Style+Script&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #f5f5f3; width: 100%; height: 100vh; overflow: hidden; font-family: 'Courier New', monospace; }
+  .scene { position: relative; width: 100%; height: 100vh; }
+  canvas { display: block; position: absolute; inset: 0; width: 100%; height: 100%; cursor: crosshair; z-index: 1; }
+  .heading {
+    position: absolute; top: 0; left: 0; right: 0; z-index: 10;
+    display: flex; align-items: center; justify-content: center; gap: 14px;
+    padding: 22px 0 18px; pointer-events: none;
+    background: linear-gradient(to bottom, rgba(245,245,243,0.97) 0%, rgba(245,245,243,0.55) 72%, transparent 100%);
+  }
+  .heading-rule { display: block; width: 60px; height: 1px; background: rgba(80,80,80,0.20); flex-shrink: 0; }
+  .heading-text {
+    font-family: "Style Script", cursive; font-weight: 400;
+    font-size: clamp(42px, 6vw, 76px); color: #1a1a1a;
+    letter-spacing: 0.02em; line-height: 1.1; text-shadow: none;
+  }
+  .vignette {
+    position: absolute; inset: 0; pointer-events: none; z-index: 2;
+    background: radial-gradient(ellipse at 50% 50%, transparent 54%, rgba(190,188,184,0.18) 100%);
+  }
+  .label {
+    position: absolute; z-index: 3; font-size: 9px; letter-spacing: 0.24em;
+    text-transform: uppercase; color: rgba(60,60,60,0.28); pointer-events: none;
+  }
+  .label-tl { top: 24px; left: 28px; }
+  .label-tr { top: 24px; right: 28px; }
+  .label-bl { bottom: 24px; left: 28px; }
+  .label-br { bottom: 24px; right: 28px; }
+  .bl { position: absolute; background: rgba(80,80,80,0.07); z-index: 3; pointer-events: none; }
+  .bl.t { top:0;left:0;right:0;height:1px; }
+  .bl.b { bottom:0;left:0;right:0;height:1px; }
+  .bl.l { top:0;bottom:0;left:0;width:1px; }
+  .bl.r { top:0;bottom:0;right:0;width:1px; }
+</style>
+</head>
+<body>
+<div class="scene">
+  <canvas id="c"></canvas>
+  <div class="vignette"></div>
+  <div class="bl t"></div><div class="bl b"></div>
+  <div class="bl l"></div><div class="bl r"></div>
+  <div class="heading">
+    <span class="heading-rule"></span>
+    <span class="heading-text">The Canary</span>
+    <span class="heading-rule"></span>
+  </div>
+  <div class="label label-tl">DNA // WAVE</div>
+  <div class="label label-tr" id="bpm">BPM ···</div>
+  <div class="label label-bl" id="seq">SEQ 0001</div>
+  <div class="label label-br">LIVE</div>
+</div>
+<script>
+(function () {
+  const canvas = document.getElementById('c');
+  const ctx    = canvas.getContext('2d');
+
+  let W, H, PX, COLS, ROWS, MID;
+  const ATTRACT_R = 180;
+  const WAVE_LO = 0.06, WAVE_HI = 0.94;
+
+  function resize() {
+    W = canvas.offsetWidth; H = canvas.offsetHeight;
+    canvas.width = W; canvas.height = H;
+    PX   = Math.max(3, Math.round(W / 220));
+    COLS = Math.floor(W / PX);
+    ROWS = Math.floor(H / PX);
+    MID  = ROWS / 2;
+  }
+  resize();
+  window.addEventListener('resize', resize);
+
+  const mouse = { x:-9999, y:-9999, inside:false };
+  canvas.addEventListener('mousemove', e => {
+    const r = canvas.getBoundingClientRect();
+    mouse.x = e.clientX-r.left; mouse.y = e.clientY-r.top; mouse.inside = true;
+  });
+  canvas.addEventListener('mouseleave', () => { mouse.inside=false; mouse.x=-9999; mouse.y=-9999; });
+
+  /* ─── STRANDS ─── */
+  const STRANDS = [
+    { phaseOffset:0,           ampScale:1.00, colorShift:0   },
+    { phaseOffset:Math.PI*2/3, ampScale:0.88, colorShift:130 },
+    { phaseOffset:Math.PI*4/3, ampScale:0.40, colorShift:250 },
+    { phaseOffset:Math.PI/5,   ampScale:0.24, colorShift:180 },
+  ];
+  const BANDS = [
+    { f:0.7,  s:0.45, p:0.00, a:1.00 },
+    { f:1.8,  s:1.00, p:1.20, a:0.85 },
+    { f:3.2,  s:1.80, p:2.50, a:0.60 },
+    { f:5.5,  s:2.70, p:0.80, a:0.38 },
+    { f:0.35, s:0.22, p:1.80, a:0.55 },
+  ];
+
+  function heartbeatAmp(t) {
+    const c = (t * 1.05) % (Math.PI * 2);
+    return 0.62
+      + Math.exp(-Math.pow((c-1.2)*3.2, 2))
+      + Math.exp(-Math.pow((c-0.4)*5.5, 2)) * 0.24
+      + Math.exp(-Math.pow((c-2.4)*2.0, 2)) * 0.32;
+  }
+
+  function strandHeight(col, t, strand) {
+    const xRaw = col / COLS;
+    if (xRaw < WAVE_LO || xRaw > WAVE_HI) return 0;
+    const x = (xRaw - WAVE_LO) / (WAVE_HI - WAVE_LO);
+    const env = Math.pow(Math.sin(x * Math.PI), 2.2);
+    let v = 0;
+    for (const b of BANDS)
+      v += Math.sin(x * Math.PI * b.f + t * b.s + b.p + strand.phaseOffset) * b.a;
+    v /= BANDS.length;
+    const shimmer = Math.sin(x*36+t*10+strand.phaseOffset)*0.010
+                  + Math.sin(x*22-t*14+strand.phaseOffset)*0.006;
+    const hb = heartbeatAmp(t + strand.phaseOffset * 0.18);
+    return Math.abs(v + shimmer) * env * hb * ROWS * 0.62 * strand.ampScale;
+  }
+
+  function strandCenter(col, t, strand) {
+    const xRaw = col / COLS;
+    if (xRaw < WAVE_LO || xRaw > WAVE_HI) return MID;
+    const x = (xRaw - WAVE_LO) / (WAVE_HI - WAVE_LO);
+    const env = Math.sin(x * Math.PI);
+    const drift = Math.sin(x*Math.PI*1.6 + t*0.36 + strand.phaseOffset)
+                * Math.sin(x*Math.PI*0.7  - t*0.22 + strand.phaseOffset*0.5);
+    return MID + drift * env * ROWS * 0.055;
+  }
+
+  /* ─── VERY SUBTLE background bloom (just 2, very low alpha) ─── */
+  function drawFluoroBloom(t) {
+    const blooms = [
+      { xf:0.35, yf:0.50, hue:210, r:0.26, a:0.014 },
+      { xf:0.65, yf:0.50, hue:275, r:0.24, a:0.013 },
+    ];
+    for (const b of blooms) {
+      const pulse = 1.0 + Math.sin(t*0.35 + b.hue) * 0.06;
+      const bx = W*b.xf, by = H*b.yf, br = Math.min(W,H)*b.r*pulse;
+      const a = b.a * (0.9 + Math.sin(t*0.22 + b.hue*0.01)*0.10);
+      const g = ctx.createRadialGradient(bx,by,0,bx,by,br);
+      g.addColorStop(0,  `hsla(${b.hue},80%,52%,${a})`);
+      g.addColorStop(1,  `hsla(${b.hue},80%,60%,0)`);
+      ctx.globalAlpha=1; ctx.fillStyle=g;
+      ctx.beginPath(); ctx.arc(bx,by,br,0,Math.PI*2); ctx.fill();
+    }
+  }
+
+  /* ─── CURSOR ─── */
+  function drawCursor() {
+    if (!mouse.inside) return;
+    ctx.globalAlpha=0.035; ctx.strokeStyle='#555'; ctx.lineWidth=1;
+    ctx.setLineDash([3,8]);
+    ctx.beginPath(); ctx.arc(mouse.x,mouse.y,ATTRACT_R,0,Math.PI*2); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.globalAlpha=0.50; ctx.fillStyle='#333';
+    ctx.beginPath(); ctx.arc(mouse.x,mouse.y,2,0,Math.PI*2); ctx.fill();
+  }
+
+  /* ─── DNA RUNGS — blended pixel bridges between strands ─── */
+  function drawDNARungs(t) {
+    const spacing = 14;
+    for (let col = 0; col < COLS; col++) {
+      const scroll = (t * 3.8) % spacing;
+      if ((col + scroll) % spacing > 1.8) continue;
+
+      /* Only draw where the wave is actually wide enough to make sense */
+      const xRaw = col / COLS;
+      if (xRaw < WAVE_LO + 0.04 || xRaw > WAVE_HI - 0.04) continue;
+      const xN   = (xRaw - WAVE_LO) / (WAVE_HI - WAVE_LO);
+      const envA = Math.pow(Math.sin(xN * Math.PI), 1.8); /* fade at tips */
+      if (envA < 0.15) continue;
+
+      const c0 = strandCenter(col, t, STRANDS[0]);
+      const c1 = strandCenter(col, t, STRANDS[1]);
+      const h0 = strandHeight(col, t, STRANDS[0]);
+      const h1 = strandHeight(col, t, STRANDS[1]);
+      if (h0 < 2 || h1 < 2) continue;
+
+      /* Bridge runs between the two strand centres */
+      const rowTop = Math.ceil(c0);
+      const rowBot = Math.floor(c1);
+      if (rowBot <= rowTop + 1) continue;
+      const span = rowBot - rowTop;
+
+      /* Hue matches the strand hue at this column position */
+      const baseHue0 = ((col/COLS)*280 + t*18 + STRANDS[0].colorShift) % 360;
+      const baseHue1 = ((col/COLS)*280 + t*18 + STRANDS[1].colorShift) % 360;
+
+      const masterA = envA * 0.58;
+      const pad = Math.max(1, PX * 0.18);
+      const sz  = PX - pad * 2;
+      const rad = Math.max(1, sz * 0.32);
+
+      for (let row = rowTop; row <= rowBot; row++) {
+        if (row < 0 || row >= ROWS) continue;
+        const frac = span > 0 ? (row - rowTop) / span : 0.5;
+
+        /* Hue smoothly blends from strand0 colour to strand1 colour */
+        const hue   = (baseHue0 + frac * ((baseHue1 - baseHue0 + 540) % 360 - 180) + 360) % 360;
+
+        /* Slightly brighter in the middle, anchor-dark at the two ends */
+        const midBulge = 1 - Math.pow(frac * 2 - 1, 2) * 0.5;
+        const light    = 22 + midBulge * 18;
+        const alpha    = masterA * (0.55 + midBulge * 0.45);
+
+        ctx.globalAlpha = Math.min(alpha, 0.72);
+        ctx.fillStyle   = `hsl(${hue},82%,${light}%)`;
+        ctx.beginPath();
+        ctx.roundRect(col * PX + pad, row * PX + pad, sz, sz, rad);
+        ctx.fill();
+      }
+
+      /* Anchor pixels at top & bottom — same size, just darker to anchor the rung */
+      for (const [row, nh] of [[rowTop, baseHue0],[rowBot, baseHue1]]) {
+        if (row < 0 || row >= ROWS) continue;
+        ctx.globalAlpha = Math.min(envA * 0.80, 0.88);
+        ctx.fillStyle   = `hsl(${nh},85%,16%)`;
+        ctx.beginPath();
+        ctx.roundRect(col * PX + pad, row * PX + pad, sz, sz, rad);
+        ctx.fill();
+      }
+    }
+  }
+
+  /* ─── PIXEL EXPLOSION SPARKS ─── */
+  /* Each "spark" is a solid square pixel chunk that pops out and tumbles */
+  const sparks = [];
+
+  function spawnPixelBurst(cx, cy, hue, count) {
+    for (let k = 0; k < count; k++) {
+      if (sparks.length > 220) break;
+      const angle  = Math.random() * Math.PI * 2;
+      const speed  = 0.8 + Math.random() * 2.8;
+      const sz     = PX * (0.45 + Math.random() * 0.75); /* pixel-sized chunks */
+      sparks.push({
+        x:  cx, y: cy,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed - (0.4 + Math.random() * 0.8), /* bias upward */
+        sz,
+        rot:  Math.random() * Math.PI * 2,
+        rotV: (Math.random()-0.5) * 0.18,
+        life: 1.0,
+        decay: 0.018 + Math.random() * 0.016,
+        hue:  (hue + (Math.random()-0.5)*30) % 360,
+        light: 18 + Math.random() * 22,
+      });
+    }
+  }
+
+  function tickSparks() {
+    for (let i = sparks.length-1; i >= 0; i--) {
+      const s = sparks[i];
+      s.x   += s.vx;
+      s.y   += s.vy;
+      s.vy  += 0.07;      /* gravity */
+      s.vx  *= 0.985;     /* slight drag */
+      s.rot += s.rotV;
+      s.life -= s.decay;
+      if (s.life <= 0) sparks.splice(i, 1);
+    }
+  }
+
+  function drawSparks() {
+    for (const s of sparks) {
+      /* Fade in quickly, then hold, then fade at end */
+      const t01  = 1 - s.life;
+      const fade = s.life < 0.25 ? s.life / 0.25 : 1.0;
+      const alpha = fade * 0.92;
+
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      ctx.translate(s.x, s.y);
+      ctx.rotate(s.rot);
+
+      /* Solid square pixel — no glow, no gradient */
+      ctx.fillStyle = `hsl(${s.hue},88%,${s.light}%)`;
+      ctx.fillRect(-s.sz/2, -s.sz/2, s.sz, s.sz);
+
+      /* Tiny bright face to give depth */
+      ctx.globalAlpha = alpha * 0.45;
+      ctx.fillStyle = `hsl(${s.hue},70%,${s.light+30}%)`;
+      ctx.fillRect(-s.sz/2, -s.sz/2, s.sz * 0.4, s.sz * 0.4);
+
+      ctx.restore();
+    }
+  }
+
+  /* ─── BPM ─── */
+  let bpmVal=72, bpmF=0;
+  function updateBPM(hb) {
+    bpmVal = hb>1.4 ? 72+Math.floor(hb*9) : Math.max(72,bpmVal-0.2);
+    if (++bpmF%8===0) {
+      document.getElementById('bpm').textContent=`BPM ${Math.round(bpmVal).toString().padStart(3,'0')}`;
+      document.getElementById('seq').textContent=`SEQ ${bpmF.toString().padStart(4,'0')}`;
+    }
+  }
+
+  let t=0, frame=0;
+
+  function draw() {
+    ctx.globalAlpha=1;
+    ctx.fillStyle='#f5f5f3';
+    ctx.fillRect(0,0,W,H);
+
+    /* 1. Very subtle background tint */
+    drawFluoroBloom(t);
+
+    const hb = heartbeatAmp(t);
+    updateBPM(hb);
+
+    /* 2. STRANDS — drawn first so rungs sit on top */
+    for (let si=0; si<STRANDS.length; si++) {
+      const strand  = STRANDS[si];
+      const isFaint = si >= 2;
+      const aScale  = isFaint ? 0.28 : 1.0;
+
+      for (let col=0; col<COLS; col++) {
+        const half   = strandHeight(col, t, strand);
+        if (half < 0.5) continue;
+        const center = strandCenter(col, t, strand);
+        const top    = Math.round(center - half);
+        const bot    = Math.round(center + half);
+        const baseHue = ((col/COLS)*280 + t*18 + strand.colorShift) % 360;
+        const cx = col*PX + PX/2, cy = center*PX;
+
+        /* REDUCED bloom — only primary strands, much lower alpha */
+        if (!isFaint) {
+          const gr = ctx.createRadialGradient(cx,cy,0,cx,cy,half*PX*1.0);
+          gr.addColorStop(0,  `hsla(${baseHue},80%,50%,0.06)`);
+          gr.addColorStop(1,  `hsla(${baseHue},80%,56%,0)`);
+          ctx.globalAlpha=1; ctx.fillStyle=gr;
+          ctx.beginPath(); ctx.arc(cx,cy,half*PX*1.0,0,Math.PI*2); ctx.fill();
+        }
+
+        /* Spawn pixel burst — on peaks, with heartbeat probability */
+        const hbL = heartbeatAmp(t + strand.phaseOffset*0.18);
+        if (!isFaint && frame%4===si%4 && half>ROWS*0.10 && Math.random()<0.038*hbL) {
+          spawnPixelBurst(cx, top*PX, baseHue, Math.floor(2 + Math.random()*3));
+        }
+
+        /* ── Pixel body — SHARPER falloff, more distinct ── */
+        for (let row=top; row<=bot; row++) {
+          if (row<0||row>=ROWS) continue;
+          const dist  = Math.abs(row-center) / Math.max(half,1);
+          /* power 7 for a very sharp, distinct edge — body at power 4 */
+          const core  = Math.pow(1-dist, 7.0);
+          const body  = Math.pow(Math.max(0,1-dist*dist), 4.0) * 0.55;
+          const alpha = Math.min(Math.max(core,body),1.0) * aScale;
+          if (alpha < 0.02) continue;
+          const hue   = (baseHue + dist*28) % 360;
+          /* darker centre (12%), lighter edge (30%) — reversal gives vivid rim */
+          const light = 12 + dist * 26;
+          ctx.globalAlpha = alpha;
+          ctx.fillStyle   = `hsl(${hue},92%,${light}%)`;
+          const pad = Math.max(1, PX*0.10);
+          const rad = Math.max(1,(PX-pad*2)*0.30);
+          ctx.beginPath();
+          ctx.roundRect(col*PX+pad, row*PX+pad, PX-pad*2, PX-pad*2, rad);
+          ctx.fill();
+        }
+
+        /* spine removed */
+      }
+    }
+
+    /* 3. DNA RUNGS — on top of strands */
+    drawDNARungs(t);
+
+    /* 4. Pixel sparks — topmost */
+    tickSparks();
+    drawSparks();
+
+    drawCursor();
+    ctx.globalAlpha=1;
+    t += 0.020; frame++;
+    requestAnimationFrame(draw);
+  }
+
+  draw();
+}());
+</script>
+</body>
+</html>
