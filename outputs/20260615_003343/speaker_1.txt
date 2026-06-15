@@ -1,0 +1,8 @@
+[Language: te]
+[Status: ✓  READY — meaningful speech detected]
+[RMS: -18.0 dBFS | Speech ratio: 61%]
+
+a.e.m.v.r. is the weather in bangaloreu.
+
+--- Segments ---
+[0.00s → 4.00s] A.E.M.V.R. is the weather in Bangaloreu.  [low confidence]

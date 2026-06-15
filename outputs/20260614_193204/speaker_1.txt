@@ -1,8 +1,0 @@
-[Language: en]
-[Status: ✓  READY — meaningful speech detected]
-[RMS: -29.3 dBFS | Speech ratio: 38%]
-
-Raju, don't play any music.
-
---- Segments ---
-[0.00s → 2.00s] Raju, don't play any music.

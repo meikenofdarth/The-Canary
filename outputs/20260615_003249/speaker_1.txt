@@ -1,0 +1,9 @@
+[Language: hi]
+[Status: ✓  READY — meaningful speech detected]
+[RMS: -19.7 dBFS | Speech ratio: 43%]
+
+hmm... amy, what is the weather in mumbai?
+
+--- Segments ---
+[0.00s → 0.50s] Hmm...
+[1.00s → 3.00s] Amy, what is the weather in Mumbai?

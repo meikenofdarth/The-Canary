@@ -1,0 +1,5 @@
+[Language: ml]
+[Status: ✗  REJECTED — non-speech audio (cough / background noise)]
+[RMS: -22.0 dBFS | Speech ratio: 61%]
+
+(non-speech audio — cough, background noise, music, etc.)

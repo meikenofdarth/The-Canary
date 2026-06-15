@@ -1,8 +1,0 @@
-[Language: en]
-[Status: ✓  READY — meaningful speech detected]
-[RMS: -23.5 dBFS | Speech ratio: 54%]
-
-ami, what is the weather in luxembourg?
-
---- Segments ---
-[0.00s → 4.00s] Ami, what is the weather in Luxembourg?

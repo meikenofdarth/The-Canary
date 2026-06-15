@@ -1,8 +1,0 @@
-[Language: en]
-[Status: ✓  READY — meaningful speech detected]
-[RMS: -23.2 dBFS | Speech ratio: 53%]
-
-ammi, what is the weather in hadraabad?
-
---- Segments ---
-[0.00s → 4.00s] Ammi, what is the weather in Hadraabad?

@@ -1,8 +1,0 @@
-[Language: en]
-[Status: ✓  READY — meaningful speech detected]
-[RMS: -24.4 dBFS | Speech ratio: 68%]
-
-amee what is the weather in a luxembourg?
-
---- Segments ---
-[0.00s → 3.36s] Amee what is the weather in a Luxembourg?

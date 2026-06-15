@@ -1,8 +1,0 @@
-[Language: en]
-[Status: ✓  READY — meaningful speech detected]
-[RMS: -22.6 dBFS | Speech ratio: 50%]
-
-ami, what is the weather in bengal?
-
---- Segments ---
-[0.00s → 4.00s] Ami, what is the weather in Bengal?

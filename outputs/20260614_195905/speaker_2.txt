@@ -1,8 +1,0 @@
-[Language: en]
-[Status: ✓  READY — meaningful speech detected]
-[RMS: -24.4 dBFS | Speech ratio: 50%]
-
-ammi, what is the weather in bangalore?
-
---- Segments ---
-[0.00s → 4.00s] Ammi, what is the weather in Bangalore?

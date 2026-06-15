@@ -1,0 +1,103 @@
+{
+  "timestamp": "2026-06-15T00:34:00.368154",
+  "session_dir": "outputs/20260615_003343",
+  "drs_mode": "C",
+  "scene": {
+    "speaker_count": 2,
+    "complexity": 0.721,
+    "noise_level": 0.404,
+    "simul_speech": 1.0
+  },
+  "speakers": [
+    {
+      "id": "speaker_1",
+      "status": "READY",
+      "transcript": "a.e.m.v.r. is the weather in bangaloreu.",
+      "wakeword": false,
+      "wakeword_confidence": 0.0,
+      "wakeword_phrase": null,
+      "type": "CONVERSATION",
+      "type_confidence": 0.75,
+      "identity": "Hemang Seth",
+      "identity_confidence": 0.7572,
+      "known_user": true,
+      "start_time": 0.0,
+      "intent_result": {
+        "domain": "WEATHER",
+        "polarity": "POSITIVE",
+        "confidence": 0.55,
+        "entities": {
+          "location": "Bangaloreu"
+        },
+        "raw_signals": [
+          "weather"
+        ],
+        "original_text": "a.e.m.v.r. is the weather in bangaloreu."
+      }
+    },
+    {
+      "id": "speaker_2",
+      "status": "REJECTED",
+      "transcript": "",
+      "wakeword": false,
+      "wakeword_confidence": 0.0,
+      "wakeword_phrase": null,
+      "type": "UNKNOWN",
+      "type_confidence": 0.0,
+      "identity": "Deepkumar",
+      "identity_confidence": 0.7235,
+      "known_user": true,
+      "start_time": 0.0,
+      "intent_result": {
+        "domain": "UNKNOWN",
+        "polarity": "NEUTRAL",
+        "confidence": 0.0,
+        "entities": {},
+        "raw_signals": [],
+        "original_text": ""
+      }
+    }
+  ],
+  "wakeword_count": 0,
+  "command_count": 0,
+  "conflict": false,
+  "conflict_pair": null,
+  "route": "IGNORE",
+  "arbitration": {
+    "winner": null,
+    "route": "IGNORE",
+    "reason": "No wakeword commands detected.",
+    "speakers": [
+      {
+        "id": "speaker_1",
+        "identity": "Hemang Seth",
+        "identity_confidence": 0.7572,
+        "known_user": true,
+        "wakeword": false,
+        "wakeword_confidence": 0.0,
+        "transcript": "a.e.m.v.r. is the weather in bangaloreu.",
+        "type": "CONVERSATION",
+        "separation_quality": 1.0,
+        "identity_note": "",
+        "start_time": 0.0,
+        "priority": 0.5029,
+        "intent": "WEATHER"
+      },
+      {
+        "id": "speaker_2",
+        "identity": "Deepkumar",
+        "identity_confidence": 0.7235,
+        "known_user": true,
+        "wakeword": false,
+        "wakeword_confidence": 0.0,
+        "transcript": "",
+        "type": "UNKNOWN",
+        "separation_quality": 1.0,
+        "identity_note": "",
+        "start_time": 0.0,
+        "priority": 0.4894,
+        "intent": null
+      }
+    ]
+  }
+}

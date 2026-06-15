@@ -1,0 +1,99 @@
+{
+  "timestamp": "2026-06-15T00:33:37.578896",
+  "session_dir": "outputs/20260615_003319",
+  "drs_mode": "C",
+  "scene": {
+    "speaker_count": 2,
+    "complexity": 0.731,
+    "noise_level": 0.436,
+    "simul_speech": 1.0
+  },
+  "speakers": [
+    {
+      "id": "speaker_1",
+      "status": "REJECTED",
+      "transcript": "",
+      "wakeword": false,
+      "wakeword_confidence": 0.0,
+      "wakeword_phrase": null,
+      "type": "UNKNOWN",
+      "type_confidence": 0.0,
+      "identity": "Hemang Seth",
+      "identity_confidence": 0.7253,
+      "known_user": true,
+      "start_time": 0.0,
+      "intent_result": {
+        "domain": "UNKNOWN",
+        "polarity": "NEUTRAL",
+        "confidence": 0.0,
+        "entities": {},
+        "raw_signals": [],
+        "original_text": ""
+      }
+    },
+    {
+      "id": "speaker_2",
+      "status": "REJECTED",
+      "transcript": "",
+      "wakeword": false,
+      "wakeword_confidence": 0.0,
+      "wakeword_phrase": null,
+      "type": "UNKNOWN",
+      "type_confidence": 0.0,
+      "identity": "Deepkumar",
+      "identity_confidence": 0.7697,
+      "known_user": true,
+      "start_time": 0.0,
+      "intent_result": {
+        "domain": "UNKNOWN",
+        "polarity": "NEUTRAL",
+        "confidence": 0.0,
+        "entities": {},
+        "raw_signals": [],
+        "original_text": ""
+      }
+    }
+  ],
+  "wakeword_count": 0,
+  "command_count": 0,
+  "conflict": false,
+  "conflict_pair": null,
+  "route": "IGNORE",
+  "arbitration": {
+    "winner": null,
+    "route": "IGNORE",
+    "reason": "No wakeword commands detected.",
+    "speakers": [
+      {
+        "id": "speaker_1",
+        "identity": "Hemang Seth",
+        "identity_confidence": 0.7253,
+        "known_user": true,
+        "wakeword": false,
+        "wakeword_confidence": 0.0,
+        "transcript": "",
+        "type": "UNKNOWN",
+        "separation_quality": 1.0,
+        "identity_note": "",
+        "start_time": 0.0,
+        "priority": 0.4901,
+        "intent": null
+      },
+      {
+        "id": "speaker_2",
+        "identity": "Deepkumar",
+        "identity_confidence": 0.7697,
+        "known_user": true,
+        "wakeword": false,
+        "wakeword_confidence": 0.0,
+        "transcript": "",
+        "type": "UNKNOWN",
+        "separation_quality": 1.0,
+        "identity_note": "",
+        "start_time": 0.0,
+        "priority": 0.5079,
+        "intent": null
+      }
+    ]
+  }
+}
