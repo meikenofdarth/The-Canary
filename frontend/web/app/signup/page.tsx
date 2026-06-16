@@ -41,7 +41,7 @@ export default function SignUpPage() {
             />
             <h1 className="mt-4 text-3xl font-bold text-foreground">Create Account</h1>
             <p className="mt-2 text-muted-foreground">
-              Join The Canary and start managing your assistant
+              Join The Canary and start managing voice assistants
             </p>
           </div>
 

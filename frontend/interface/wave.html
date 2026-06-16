@@ -18,10 +18,11 @@
     padding: 22px 0 18px; pointer-events: none;
     background: linear-gradient(to bottom, rgba(245,245,243,0.97) 0%, rgba(245,245,243,0.55) 72%, transparent 100%);
   }
-  .heading-rule { display: block; width: 60px; height: 1px; background: rgba(80,80,80,0.20); flex-shrink: 0; }
+  .heading-rule { display: block; width: 60px; height: 1px; background: rgba(180,140,0,0.25); flex-shrink: 0; }
   .heading-text {
     font-family: "Style Script", cursive; font-weight: 400;
-    font-size: clamp(42px, 6vw, 76px); color: #1a1a1a;
+    font-size: clamp(42px, 6vw, 76px);
+    color: #c89400;
     letter-spacing: 0.02em; line-height: 1.1; text-shadow: none;
   }
   .vignette {
@@ -86,7 +87,6 @@
   });
   canvas.addEventListener('mouseleave', () => { mouse.inside=false; mouse.x=-9999; mouse.y=-9999; });
 
-  /* ─── STRANDS ─── */
   const STRANDS = [
     { phaseOffset:0,           ampScale:1.00, colorShift:0   },
     { phaseOffset:Math.PI*2/3, ampScale:0.88, colorShift:130 },
@@ -134,7 +134,7 @@
     return MID + drift * env * ROWS * 0.055;
   }
 
-  /* ─── VERY SUBTLE background bloom (just 2, very low alpha) ─── */
+  /* ─── SUBTLE BLOOM ─── */
   function drawFluoroBloom(t) {
     const blooms = [
       { xf:0.35, yf:0.50, hue:210, r:0.26, a:0.014 },
@@ -145,8 +145,8 @@
       const bx = W*b.xf, by = H*b.yf, br = Math.min(W,H)*b.r*pulse;
       const a = b.a * (0.9 + Math.sin(t*0.22 + b.hue*0.01)*0.10);
       const g = ctx.createRadialGradient(bx,by,0,bx,by,br);
-      g.addColorStop(0,  `hsla(${b.hue},80%,52%,${a})`);
-      g.addColorStop(1,  `hsla(${b.hue},80%,60%,0)`);
+      g.addColorStop(0, `hsla(${b.hue},80%,52%,${a})`);
+      g.addColorStop(1, `hsla(${b.hue},80%,60%,0)`);
       ctx.globalAlpha=1; ctx.fillStyle=g;
       ctx.beginPath(); ctx.arc(bx,by,br,0,Math.PI*2); ctx.fill();
     }
@@ -163,18 +163,17 @@
     ctx.beginPath(); ctx.arc(mouse.x,mouse.y,2,0,Math.PI*2); ctx.fill();
   }
 
-  /* ─── DNA RUNGS — blended pixel bridges between strands ─── */
+  /* ─── DNA RUNGS — blended pixels, NO dark anchors ─── */
   function drawDNARungs(t) {
     const spacing = 14;
     for (let col = 0; col < COLS; col++) {
       const scroll = (t * 3.8) % spacing;
       if ((col + scroll) % spacing > 1.8) continue;
 
-      /* Only draw where the wave is actually wide enough to make sense */
       const xRaw = col / COLS;
       if (xRaw < WAVE_LO + 0.04 || xRaw > WAVE_HI - 0.04) continue;
       const xN   = (xRaw - WAVE_LO) / (WAVE_HI - WAVE_LO);
-      const envA = Math.pow(Math.sin(xN * Math.PI), 1.8); /* fade at tips */
+      const envA = Math.pow(Math.sin(xN * Math.PI), 1.8);
       if (envA < 0.15) continue;
 
       const c0 = strandCenter(col, t, STRANDS[0]);
@@ -183,17 +182,15 @@
       const h1 = strandHeight(col, t, STRANDS[1]);
       if (h0 < 2 || h1 < 2) continue;
 
-      /* Bridge runs between the two strand centres */
       const rowTop = Math.ceil(c0);
       const rowBot = Math.floor(c1);
       if (rowBot <= rowTop + 1) continue;
       const span = rowBot - rowTop;
 
-      /* Hue matches the strand hue at this column position */
       const baseHue0 = ((col/COLS)*280 + t*18 + STRANDS[0].colorShift) % 360;
       const baseHue1 = ((col/COLS)*280 + t*18 + STRANDS[1].colorShift) % 360;
 
-      const masterA = envA * 0.58;
+      const masterA = envA * 0.52;
       const pad = Math.max(1, PX * 0.18);
       const sz  = PX - pad * 2;
       const rad = Math.max(1, sz * 0.32);
@@ -201,55 +198,43 @@
       for (let row = rowTop; row <= rowBot; row++) {
         if (row < 0 || row >= ROWS) continue;
         const frac = span > 0 ? (row - rowTop) / span : 0.5;
-
-        /* Hue smoothly blends from strand0 colour to strand1 colour */
-        const hue   = (baseHue0 + frac * ((baseHue1 - baseHue0 + 540) % 360 - 180) + 360) % 360;
-
-        /* Slightly brighter in the middle, anchor-dark at the two ends */
-        const midBulge = 1 - Math.pow(frac * 2 - 1, 2) * 0.5;
-        const light    = 22 + midBulge * 18;
-        const alpha    = masterA * (0.55 + midBulge * 0.45);
-
-        ctx.globalAlpha = Math.min(alpha, 0.72);
-        ctx.fillStyle   = `hsl(${hue},82%,${light}%)`;
+        const hue  = (baseHue0 + frac * ((baseHue1 - baseHue0 + 540) % 360 - 180) + 360) % 360;
+        /* uniform lightness — no dark anchors at all */
+        const midBulge = 1 - Math.pow(frac * 2 - 1, 2) * 0.3;
+        const light    = 38 + midBulge * 16;   /* 38–54% — always mid-tone, never dark */
+        const alpha    = masterA * (0.6 + midBulge * 0.4);
+        ctx.globalAlpha = Math.min(alpha, 0.68);
+        ctx.fillStyle   = `hsl(${hue},78%,${light}%)`;
         ctx.beginPath();
         ctx.roundRect(col * PX + pad, row * PX + pad, sz, sz, rad);
         ctx.fill();
       }
-
-      /* Anchor pixels at top & bottom — same size, just darker to anchor the rung */
-      for (const [row, nh] of [[rowTop, baseHue0],[rowBot, baseHue1]]) {
-        if (row < 0 || row >= ROWS) continue;
-        ctx.globalAlpha = Math.min(envA * 0.80, 0.88);
-        ctx.fillStyle   = `hsl(${nh},85%,16%)`;
-        ctx.beginPath();
-        ctx.roundRect(col * PX + pad, row * PX + pad, sz, sz, rad);
-        ctx.fill();
-      }
+      /* NO anchor pixels — nothing dark */
     }
   }
 
-  /* ─── PIXEL EXPLOSION SPARKS ─── */
-  /* Each "spark" is a solid square pixel chunk that pops out and tumbles */
+  /* ─── PIXEL BURST — only on a genuine big blast ─── */
   const sparks = [];
+  /* Track per-column peak to detect sudden big surges */
+  const peakTrack = {};
 
   function spawnPixelBurst(cx, cy, hue, count) {
     for (let k = 0; k < count; k++) {
-      if (sparks.length > 220) break;
-      const angle  = Math.random() * Math.PI * 2;
-      const speed  = 0.8 + Math.random() * 2.8;
-      const sz     = PX * (0.45 + Math.random() * 0.75); /* pixel-sized chunks */
+      if (sparks.length > 180) break;
+      const angle = Math.random() * Math.PI * 2;
+      const speed = 1.2 + Math.random() * 3.2;
+      const sz    = PX * (0.5 + Math.random() * 0.8);
       sparks.push({
-        x:  cx, y: cy,
+        x: cx, y: cy,
         vx: Math.cos(angle) * speed,
-        vy: Math.sin(angle) * speed - (0.4 + Math.random() * 0.8), /* bias upward */
+        vy: Math.sin(angle) * speed - (0.6 + Math.random() * 1.0),
         sz,
         rot:  Math.random() * Math.PI * 2,
-        rotV: (Math.random()-0.5) * 0.18,
+        rotV: (Math.random()-0.5) * 0.20,
         life: 1.0,
-        decay: 0.018 + Math.random() * 0.016,
-        hue:  (hue + (Math.random()-0.5)*30) % 360,
-        light: 18 + Math.random() * 22,
+        decay: 0.016 + Math.random() * 0.014,
+        hue:  (hue + (Math.random()-0.5)*25) % 360,
+        light: 22 + Math.random() * 20,
       });
     }
   }
@@ -257,10 +242,8 @@
   function tickSparks() {
     for (let i = sparks.length-1; i >= 0; i--) {
       const s = sparks[i];
-      s.x   += s.vx;
-      s.y   += s.vy;
-      s.vy  += 0.07;      /* gravity */
-      s.vx  *= 0.985;     /* slight drag */
+      s.x += s.vx; s.y += s.vy;
+      s.vy += 0.07; s.vx *= 0.984;
       s.rot += s.rotV;
       s.life -= s.decay;
       if (s.life <= 0) sparks.splice(i, 1);
@@ -269,25 +252,17 @@
 
   function drawSparks() {
     for (const s of sparks) {
-      /* Fade in quickly, then hold, then fade at end */
-      const t01  = 1 - s.life;
-      const fade = s.life < 0.25 ? s.life / 0.25 : 1.0;
-      const alpha = fade * 0.92;
-
+      const fade  = s.life < 0.28 ? s.life / 0.28 : 1.0;
+      const alpha = fade * 0.90;
       ctx.save();
       ctx.globalAlpha = alpha;
       ctx.translate(s.x, s.y);
       ctx.rotate(s.rot);
-
-      /* Solid square pixel — no glow, no gradient */
       ctx.fillStyle = `hsl(${s.hue},88%,${s.light}%)`;
       ctx.fillRect(-s.sz/2, -s.sz/2, s.sz, s.sz);
-
-      /* Tiny bright face to give depth */
-      ctx.globalAlpha = alpha * 0.45;
-      ctx.fillStyle = `hsl(${s.hue},70%,${s.light+30}%)`;
-      ctx.fillRect(-s.sz/2, -s.sz/2, s.sz * 0.4, s.sz * 0.4);
-
+      ctx.globalAlpha = alpha * 0.40;
+      ctx.fillStyle = `hsl(${s.hue},70%,${s.light+32}%)`;
+      ctx.fillRect(-s.sz/2, -s.sz/2, s.sz * 0.38, s.sz * 0.38);
       ctx.restore();
     }
   }
@@ -309,13 +284,11 @@
     ctx.fillStyle='#f5f5f3';
     ctx.fillRect(0,0,W,H);
 
-    /* 1. Very subtle background tint */
     drawFluoroBloom(t);
 
     const hb = heartbeatAmp(t);
     updateBPM(hb);
 
-    /* 2. STRANDS — drawn first so rungs sit on top */
     for (let si=0; si<STRANDS.length; si++) {
       const strand  = STRANDS[si];
       const isFaint = si >= 2;
@@ -330,32 +303,35 @@
         const baseHue = ((col/COLS)*280 + t*18 + strand.colorShift) % 360;
         const cx = col*PX + PX/2, cy = center*PX;
 
-        /* REDUCED bloom — only primary strands, much lower alpha */
         if (!isFaint) {
           const gr = ctx.createRadialGradient(cx,cy,0,cx,cy,half*PX*1.0);
-          gr.addColorStop(0,  `hsla(${baseHue},80%,50%,0.06)`);
-          gr.addColorStop(1,  `hsla(${baseHue},80%,56%,0)`);
+          gr.addColorStop(0, `hsla(${baseHue},80%,50%,0.06)`);
+          gr.addColorStop(1, `hsla(${baseHue},80%,56%,0)`);
           ctx.globalAlpha=1; ctx.fillStyle=gr;
           ctx.beginPath(); ctx.arc(cx,cy,half*PX*1.0,0,Math.PI*2); ctx.fill();
         }
 
-        /* Spawn pixel burst — on peaks, with heartbeat probability */
-        const hbL = heartbeatAmp(t + strand.phaseOffset*0.18);
-        if (!isFaint && frame%4===si%4 && half>ROWS*0.10 && Math.random()<0.038*hbL) {
-          spawnPixelBurst(cx, top*PX, baseHue, Math.floor(2 + Math.random()*3));
+        /* ── Pixel burst ONLY on genuine large-amplitude spikes ── */
+        if (!isFaint && frame%4===si%4) {
+          const colKey = `${si}_${col}`;
+          const prev   = peakTrack[colKey] || 0;
+          const surge  = half - prev;               /* how much it grew this frame */
+          /* fire only when: wave is very tall AND it surged upward sharply */
+          if (half > ROWS * 0.22 && surge > ROWS * 0.04) {
+            spawnPixelBurst(cx, top*PX, baseHue, Math.floor(3 + Math.random()*4));
+          }
+          peakTrack[colKey] = half;
         }
 
-        /* ── Pixel body — SHARPER falloff, more distinct ── */
+        /* Pixel body */
         for (let row=top; row<=bot; row++) {
           if (row<0||row>=ROWS) continue;
           const dist  = Math.abs(row-center) / Math.max(half,1);
-          /* power 7 for a very sharp, distinct edge — body at power 4 */
           const core  = Math.pow(1-dist, 7.0);
           const body  = Math.pow(Math.max(0,1-dist*dist), 4.0) * 0.55;
           const alpha = Math.min(Math.max(core,body),1.0) * aScale;
           if (alpha < 0.02) continue;
           const hue   = (baseHue + dist*28) % 360;
-          /* darker centre (12%), lighter edge (30%) — reversal gives vivid rim */
           const light = 12 + dist * 26;
           ctx.globalAlpha = alpha;
           ctx.fillStyle   = `hsl(${hue},92%,${light}%)`;
@@ -365,18 +341,13 @@
           ctx.roundRect(col*PX+pad, row*PX+pad, PX-pad*2, PX-pad*2, rad);
           ctx.fill();
         }
-
-        /* spine removed */
+        /* no spine */
       }
     }
 
-    /* 3. DNA RUNGS — on top of strands */
     drawDNARungs(t);
-
-    /* 4. Pixel sparks — topmost */
     tickSparks();
     drawSparks();
-
     drawCursor();
     ctx.globalAlpha=1;
     t += 0.020; frame++;

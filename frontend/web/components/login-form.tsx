@@ -129,7 +129,9 @@ export function LoginForm() {
               Sign Up
             </button>
           </p>
-        
+          <p className="text-xs text-muted-foreground">
+            Demo credentials: any phone number and password
+          </p>
           <button
             onClick={() => router.push('/')}
             className="flex items-center justify-center gap-2 w-full text-sm text-muted-foreground hover:text-foreground transition-colors"

@@ -48,7 +48,7 @@ export default function Home() {
       <section className="relative border-t border-border bg-secondary/20 px-4 py-20 sm:px-6 lg:px-8">
         <div className="mx-auto max-w-5xl">
           <h2 className="text-center text-3xl font-bold text-foreground">
-            Built for Modern Teams
+            Built for Modern Times
           </h2>
           <p className="mt-4 text-center text-lg text-muted-foreground">
             Everything you need to manage voice assistants at scale

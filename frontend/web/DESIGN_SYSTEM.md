@@ -483,7 +483,131 @@ See `/app/add-speaker/page.tsx` for detailed TODO comments.
 
 ---
 
-## 14. Summary
+## 14. Accessibility & Inclusive Design
+
+### Design Philosophy
+The Canary is built with accessibility-first principles to serve users with diverse abilities, including those with:
+- Speech differences or lisp
+- Motor control variations
+- Cognitive processing differences
+- Visual impairments
+- Hearing differences
+
+### Accessibility Features
+
+#### Wake Word Configuration Page
+- **Large, centered microphone icon** (140x140px) for easy target visibility
+- **Gradient visual feedback** when speaking (blue to primary yellow gradient)
+- **Progress bar with 3 distinct phases** showing visual progress
+- **Clear color contrasts** (WCAG AAA compliant)
+- **Large touch targets** (min 44x44px for buttons)
+- **Simple, uncluttered layout** reducing cognitive load
+
+#### Font Accessibility
+- Comic Relief: 16-24px for body text (never smaller than 14px)
+- Manrope: 18-28px for headings (friendly, modern, readable)
+- Mulish: 14-20px for secondary text (professional, clean)
+- Line height: 1.5-1.6 for better readability
+- Letter spacing: Generous for dyslexia-friendly reading
+
+#### Color Accessibility
+- Contrast ratios: Minimum WCAG AA (4.5:1 for small text, 3:1 for large text)
+- No color-only indicators (always pair with text/icons)
+- Status badges include text labels, not just colors
+- Focus states: Blue ring (`ring-2 ring-primary/20`) on all interactive elements
+
+#### Microphone Interface Specifics
+- **Speaking Detection:** Visual feedback (gradient expansion) when audio detected
+- **Phase Feedback:** Numbered indicators + color changes (grey → green when complete)
+- **Timing:** 5-second per phrase window (not rushed)
+- **Instructions:** 4 simple steps in numbered circles
+- **Error Messages:** Clear, non-technical language
+
+#### Form Inputs
+- Labels always visible (not placeholder-only)
+- Clear error messages with suggestions
+- Required fields marked explicitly
+- Input fields: minimum 44px height
+- Spacing between form elements: 20px minimum
+
+### Keyboard Navigation
+- All interactive elements accessible via Tab key
+- Clear focus indicators on all focusable elements
+- Enter/Space key triggers buttons and links
+- Escape key closes modals/dialogs
+- No keyboard traps anywhere
+
+### Screen Reader Support
+- Semantic HTML tags (button, nav, main, section)
+- ARIA labels on all icons (`aria-label="Settings"`)
+- Form inputs have associated labels (not just placeholders)
+- Skippable navigation links
+- Image alt text for all meaningful images
+
+### Motion & Animation
+- Animations: max 500ms duration
+- Reduced motion support: `prefers-reduced-motion: reduce` respected
+- No auto-playing audio except for accessibility cues
+- Transitions are smooth, not jarring
+
+### Cognitive Load Reduction
+- One primary action per screen
+- Consistent layout across pages
+- Clear, simple language (no jargon)
+- Progress indicators for multi-step processes
+- Undo functionality where possible
+- Helpful tooltips without over-explaining
+
+---
+
+## 15. Pages & Components
+
+### Page: Customize Wake Word (/customize-wakeword)
+**Purpose:** Allow users to record and train their custom wake word phrase
+
+**Components:**
+1. Header: "Configure Your Wake Word" (Manrope, 36px)
+2. Subtitle: "Speak '[word]' three times to train the system" (Mulish, 18px)
+3. Microphone visualization:
+   - Center icon: Mic (blue outline) or MicOff (white on gradient)
+   - Ring animations: Smooth scale when speaking detected
+   - Gradient: Primary yellow with shadow effect
+4. Phase counter: "Recording phrase 1 of 3"
+5. Progress bar: Linear progress with 3 checkpoint dots
+6. Control buttons:
+   - "Start Recording" (primary yellow)
+   - "Stop Recording" (red, pulsing when active)
+7. Instructions box: 4 numbered steps in blue/yellow palette
+8. Accessibility note: Blue info box with inclusive messaging
+
+**Layout:**
+- Vertical center alignment
+- Max-width: 600px
+- Generous padding: 32px on sides
+- Font sizes:
+  - Title: 36px (Manrope, bold)
+  - Subtitle: 18px (Mulish)
+  - Status: 20px (Mulish, medium)
+  - Instructions: 14px (Mulish)
+
+### Component: Customize Button
+- Icon: Settings (gear icon)
+- Color: Primary yellow with transparent background and border
+- Size: 44px height minimum
+- Hover: Light yellow background fill
+- Location: Manage Speakers page, next to "Add Speaker" button
+
+### Component: Microphone Icon Ring
+- Outer ring: 256px diameter, 8px border
+- Inner ring: 224px diameter, 8px border (animated)
+- Center circle: 160px diameter with gradient
+- Speaking state: Gradient to primary, scale 1.1x, shadow
+- Idle state: Light border, no shadow
+- Transition: 150ms smooth
+
+---
+
+## 16. Summary
 
 **The Canary** design system uses:
 - **Primary Font:** Comic Relief (playful, memorable brand feel)
@@ -493,8 +617,10 @@ See `/app/add-speaker/page.tsx` for detailed TODO comments.
 - **Spacing:** Generous padding (6-8px base unit)
 - **Components:** Modular, reusable cards and buttons
 - **Interactions:** Smooth transitions, clear hover states
-- **Accessibility:** WCAG AA compliant color contrasts, semantic HTML
+- **Accessibility:** WCAG AA/AAA compliant, speech-diversity friendly
 - **Performance:** Font optimization, lazy loading ready
+- **Inclusive Design:** Purpose-built for users with speech differences, motor control variations, and diverse abilities
+- **Wake Word Interface:** Large, simple, gradient-enhanced microphone with progress tracking
 
 ---
 

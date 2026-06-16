@@ -1,14 +1,15 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { DashboardNavbar } from '@/components/dashboard-navbar';
 import { UsageChart } from '@/components/usage-chart';
 import { SpeakersList } from '@/components/speakers-list';
-import { Plus } from 'lucide-react';
+import { Plus, Settings, List } from 'lucide-react';
 
 export default function Dashboard() {
   const router = useRouter();
+  const [isPending, startTransition] = useTransition();
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -47,21 +48,39 @@ export default function Dashboard() {
       <DashboardNavbar />
 
       <main className="mx-auto max-w-7xl px-6 py-8">
-        <div className="mb-8 flex items-center justify-between">
+        <div className="mb-8 flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <h1 className="text-3xl font-bold text-foreground">Dashboard</h1>
+            <h1 className="text-4xl font-bold text-foreground">Dashboard</h1>
             <p className="mt-2 text-muted-foreground">
               Welcome back. Here&apos;s your voice assistant performance overview.
             </p>
           </div>
-          <button
-            onClick={() => router.push('/add-speaker')}
-            className="inline-flex items-center gap-2 rounded-lg bg-primary px-6 py-3 font-semibold text-primary-foreground transition-all hover:shadow-lg hover:shadow-primary/40"
-          >
-            {/* TODO: API Integration - Replace icon with Mic if needed */}
-            <Plus className="h-5 w-5" />
-            Add Speaker
-          </button>
+          <div className="flex flex-wrap gap-3 lg:flex-nowrap">
+            <button
+              onClick={() => startTransition(() => router.push('/customize-wakeword'))}
+              disabled={isPending}
+              className="inline-flex items-center gap-2 rounded-lg border-2 border-primary bg-transparent px-6 py-3 font-semibold text-primary transition-all hover:bg-primary/10 hover:shadow-md disabled:opacity-60"
+            >
+              <Settings className="h-5 w-5" />
+              Set Up Voice Profile
+            </button>
+            <button
+              onClick={() => startTransition(() => router.push('/manage-speakers'))}
+              disabled={isPending}
+              className="inline-flex items-center gap-2 rounded-lg border-2 border-primary bg-transparent px-6 py-3 font-semibold text-primary transition-all hover:bg-primary/10 hover:shadow-md disabled:opacity-60"
+            >
+              <List className="h-5 w-5" />
+              Manage Speakers
+            </button>
+            <button
+              onClick={() => startTransition(() => router.push('/add-speaker'))}
+              disabled={isPending}
+              className="inline-flex items-center gap-2 rounded-lg bg-primary px-6 py-3 font-semibold text-primary-foreground transition-all hover:shadow-lg hover:shadow-primary/40 whitespace-nowrap disabled:opacity-60"
+            >
+              <Plus className="h-5 w-5" />
+              Add Speaker
+            </button>
+          </div>
         </div>
 
         <div className="grid gap-8 lg:grid-cols-3">
@@ -81,21 +100,21 @@ export default function Dashboard() {
         {/* GET /api/dashboard/metrics */}
         {/* Response: { commandsProcessed, activeSessions, avgResponseTime, accuracyRate } */}
         <div className="mt-8 grid gap-4 sm:grid-cols-2 md:grid-cols-4">
-          <div className="rounded-lg border border-border bg-card p-6">
-            <p className="text-sm text-muted-foreground">Voice Commands Processed</p>
-            <p className="mt-2 text-2xl font-bold text-foreground">145,892</p>
+          <div className="rounded-lg border border-border bg-card p-6 shadow-sm hover:shadow-md transition-shadow">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Voice Commands Processed</p>
+            <p className="mt-3 text-3xl font-bold text-foreground">145,892</p>
           </div>
-          <div className="rounded-lg border border-border bg-card p-6">
-            <p className="text-sm text-muted-foreground">Active Voice Sessions</p>
-            <p className="mt-2 text-2xl font-bold text-foreground">2,384</p>
+          <div className="rounded-lg border border-border bg-card p-6 shadow-sm hover:shadow-md transition-shadow">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Active Voice Sessions</p>
+            <p className="mt-3 text-3xl font-bold text-foreground">2,384</p>
           </div>
-          <div className="rounded-lg border border-border bg-card p-6">
-            <p className="text-sm text-muted-foreground">Avg. Response Time</p>
-            <p className="mt-2 text-2xl font-bold text-foreground">320ms</p>
+          <div className="rounded-lg border border-border bg-card p-6 shadow-sm hover:shadow-md transition-shadow">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Avg. Response Time</p>
+            <p className="mt-3 text-3xl font-bold text-foreground">320ms</p>
           </div>
-          <div className="rounded-lg border border-border bg-card p-6">
-            <p className="text-sm text-muted-foreground">Accuracy Rate</p>
-            <p className="mt-2 text-2xl font-bold text-foreground">94.2%</p>
+          <div className="rounded-lg border border-border bg-card p-6 shadow-sm hover:shadow-md transition-shadow">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Accuracy Rate</p>
+            <p className="mt-3 text-3xl font-bold text-foreground">94.2%</p>
           </div>
         </div>
       </main>

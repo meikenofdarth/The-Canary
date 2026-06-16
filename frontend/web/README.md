@@ -9,26 +9,49 @@
 ## Features
 
 ✨ **Voice Recording & Management**
-- Record voice profiles with three different speech patterns (natural, varied pace, Q&A)
-- Automatic sentence-level highlighting during recording
-- Drag-and-drop priority reordering
-- Real-time speaker dashboard
+- Record voice profiles with three different speech patterns
+- Green checkmark visual feedback when recording completes
+- Drag-and-drop priority reordering in dedicated Management page
+- Real-time speaker dashboard with emoji avatars
 
 🎙️ **Multi-Script Recording**
 - Script 1: Natural Speech - Speak clearly at your normal pace
-- Script 2: Varied Pace - Mix speeds and rhythms
+- Script 2: Varied Pace - Mix speeds and rhythms  
 - Script 3: Questions & Commands - Use natural Q&A intonation
+- Accessibility questions for users with speech differences
+
+🎯 **Wake Word Customization**
+- Record custom wake word phrases three times
+- Visual gradient feedback when speaking
+- Three-phase progress tracking with recording boxes
+- Green checkmarks show completion status
+
+📊 **Speaker Priority Management**
+- Dedicated `/manage-speakers` page for full speaker list
+- Drag-and-drop reordering with real-time priority updates
+- Click-to-cycle status management (Active/Scheduled/Completed)
+- Emoji avatar system for quick visual identification
+- Individual speaker deletion with confirmation
 
 📊 **Analytics Dashboard**
 - Real-time voice command metrics
 - Active session tracking
 - Response time monitoring
 - Accuracy rate tracking
+- Quick navigation buttons to manage speakers and set up profiles
 
 🔐 **Secure Authentication**
 - 10-digit phone number validation
 - Secure password authentication
 - Session management
+
+♿ **Accessibility & Inclusive Design**
+- WCAG AA/AAA compliant color contrasts
+- Support for users with speech variations, lisp, and speech challenges
+- Accessibility mode with guided questions
+- Special marker (♿) for accessibility-enabled speakers in database
+- Keyboard navigation and screen reader support
+- Reduced motion support
 
 ---
 
@@ -48,6 +71,49 @@
 ```
 /app
   /layout.tsx                    # Main layout with font imports
+  /page.tsx                      # Landing page
+  /add-speaker/page.tsx          # Add new speaker with voice recording
+  /manage-speakers/page.tsx      # Manage speakers with priority reordering (NEW)
+  /customize-wakeword/page.tsx   # Wake word customization
+  /dashboard/page.tsx            # Main dashboard with analytics
+  /login/page.tsx                # Login page
+  /signup/page.tsx               # Signup page
+
+/components
+  /login-form.tsx                # Authentication form
+  /dashboard-navbar.tsx          # Dashboard header
+  /speakers-list.tsx             # Speaker list component
+  /footer.tsx                    # Footer component
+  /usage-chart.tsx               # Analytics chart
+
+/styles
+  /globals.css                   # Global styles, design tokens, fonts
+
+/public
+  /avatars/                      # Speaker avatar images
+  /icons/                        # Custom icons
+```
+
+---
+
+## Key Pages
+
+### Customize Wake Word Page (`/customize-wakeword`)
+**Purpose:** Allow users to record and train their custom wake word
+
+**Features:**
+- Large, centered microphone icon with gradient styling
+- Real-time speaking detection with visual feedback
+- Three-phase recording with progress bar
+- Numbered instructions for clarity
+- Accessibility-first design
+- Support for users with speech differences
+
+**API Integration Points:**
+- `GET /api/wakeword/settings` - Fetch current wake word settings
+- `POST /api/wakeword/session/start` - Initialize recording session
+- `POST /api/wakeword/session/save-phase` - Save each phase recording
+- `POST /api/wakeword/finalize` - Complete wake word setup
   /globals.css                   # Tailwind + custom styles
   /page.tsx                      # Landing page
   /login/page.tsx                # Login page
@@ -125,14 +191,34 @@ Visit `http://localhost:3000` in your browser.
 - Active session tracking
 - Response time stats
 - Accuracy metrics
-- Linked speakers list
+- Quick-action buttons: "Set Up Voice Profile", "Manage Speakers", "Add Speaker"
 
-### 🎙️ Speaker Management (`/add-speaker`)
-- Add new voice assistants
-- Multi-step recording process
-- Priority management (1-5)
-- Drag-and-drop reordering
-- Real-time speaker table
+### 🎙️ Add Speaker (`/add-speaker`)
+- Record voice profiles with three different speech patterns
+- Script 1: Natural Speech (speak clearly)
+- Script 2: Varied Pace (mix speeds and rhythms)
+- Script 3: Questions & Commands (natural Q&A intonation)
+- City and Country information
+- Music genre preference
+- Priority assignment (1-5)
+- Accessibility mode for users with speech differences
+- **Visual feedback:** Green checkmarks appear after each recording completes
+- **Back button redirects to Dashboard**
+
+### 📊 Manage Speakers (`/manage-speakers`) - NEW
+- View all registered speakers with emoji icons
+- Drag-and-drop priority reordering
+- Click-to-cycle status badges (Active → Scheduled → Completed)
+- Delete speakers individually
+- Real-time priority recalculation
+- Quick "Add New Speaker" button
+
+### 🎯 Customize Wake Word (`/customize-wakeword`)
+- Record custom wake word phrases three times
+- Visual gradient feedback when speaking
+- Three-phase progress tracking with progress boxes
+- Recording boxes show green checkmarks when complete
+- Accessibility-first interface for users with speech differences
 
 ---
 
@@ -169,13 +255,15 @@ All buttons (except login/signup) have API integration comments marked with `// 
 ### Available Endpoints (to be implemented)
 - `POST /api/auth/login` - User authentication
 - `GET /api/auth/session` - Session validation
-- `POST /api/speakers/create` - Create speaker
-- `GET /api/speakers` - List all speakers
+- `POST /api/speakers/create` - Create speaker with voice recordings
+- `GET /api/speakers` - List all speakers with priority
 - `DELETE /api/speakers/:id` - Delete speaker
-- `PATCH /api/speakers/:id/priority` - Update priority
-- `PATCH /api/speakers/reorder` - Reorder speakers
-- `POST /api/speakers/upload-recording` - Upload voice recording
+- `PATCH /api/speakers/:id/priority` - Update speaker priority
+- `PUT /api/speakers/reorder` - Batch reorder speakers (drag-and-drop)
+- `PATCH /api/speakers/:id/status` - Update speaker status (active/scheduled/completed)
+- `POST /api/speakers/upload-recording` - Upload voice recording blob
 - `GET /api/dashboard/metrics` - Get dashboard stats
+- `POST /api/wakeword/save` - Save custom wake word recording
 
 **→ See `API_INTEGRATION_GUIDE.md` for detailed endpoint specifications**
 

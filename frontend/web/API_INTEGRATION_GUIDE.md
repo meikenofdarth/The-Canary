@@ -50,9 +50,247 @@ Error (400/422): Validation errors
 #### Logout
 ```
 POST /api/auth/logout
-Headers: Authorization: Bearer <token>
-Response (200): { success: boolean, loggedOut: true }
+Headers: Authorization: Bearer {token}
+Response (200): { success: true, message: "Logged out successfully" }
 ```
+
+---
+
+### 2. Speaker Management Endpoints
+
+#### Create Speaker
+```
+POST /api/speakers/create
+Headers: Content-Type: application/json, Authorization: Bearer {token}
+Payload: {
+  name: string (speaker name, e.g., "Voice Model Pro"),
+  priority: number (1-5, where 5 is highest priority),
+  recordingId: string (returned from recording upload),
+  avatar: string (avatar URL or path, e.g., "/avatars/lion.png")
+}
+Response (201): {
+  id: string (UUID),
+  name: string,
+  priority: number,
+  avatar: string,
+  status: 'scheduled' | 'active' | 'completed',
+  createdAt: ISO8601 timestamp,
+  recordingUrl: string (URL to access recording)
+}
+Error (400/422): Validation errors
+```
+
+#### Get All Speakers
+```
+GET /api/speakers
+Headers: Authorization: Bearer {token}
+Query Parameters: ?userId={userId}&sort=priority (optional)
+Response (200): {
+  speakers: [
+    { id, name, priority, avatar, status, createdAt }
+  ],
+  total: number,
+  count: number
+}
+```
+
+#### Update Speaker Priority
+```
+PATCH /api/speakers/:id/priority
+Headers: Content-Type: application/json, Authorization: Bearer {token}
+Payload: { priority: number (1-5) }
+Response (200): {
+  id: string,
+  priority: number,
+  updatedAt: ISO8601 timestamp
+}
+```
+
+#### Delete Speaker
+```
+DELETE /api/speakers/:id
+Headers: Authorization: Bearer {token}
+Response (200): {
+  success: boolean (true),
+  deletedAt: ISO8601 timestamp
+}
+Error (404): Speaker not found
+```
+
+#### Reorder Speakers (Drag & Drop)
+```
+PATCH /api/speakers/reorder
+Headers: Content-Type: application/json, Authorization: Bearer {token}
+Payload: {
+  draggedId: string (UUID of dragged speaker),
+  targetId: string (UUID of target speaker),
+  draggedPriority: number (new priority for dragged speaker),
+  targetPriority: number (new priority for target speaker)
+}
+Response (200): {
+  speakers: [{ id, priority, updatedAt }],
+  reorderedAt: ISO8601 timestamp
+}
+```
+
+---
+
+### 3. Voice Recording Endpoints
+
+#### Upload Recording
+```
+POST /api/speakers/upload-recording
+Headers: Content-Type: multipart/form-data, Authorization: Bearer {token}
+Form Data:
+  - audioBlob: File (audio file, wav/webm/mp3)
+  - speakerName: string
+  - scriptId: number (1, 2, or 3)
+Response (200): {
+  recordingId: string (UUID),
+  duration: number (seconds),
+  fileSize: number (bytes),
+  processedAt: ISO8601 timestamp,
+  quality: 'good' | 'fair' | 'poor',
+  transcript: string (optional, if speech-to-text enabled)
+}
+Error (400): Invalid audio file or speaker name
+```
+
+#### Start Recording Session
+```
+POST /api/speakers/recording-session
+Headers: Content-Type: application/json, Authorization: Bearer {token}
+Payload: {
+  speakerName: string,
+  scriptId: number (1, 2, or 3)
+}
+Response (200): {
+  sessionId: string (UUID),
+  scriptText: string (the script to read),
+  startedAt: ISO8601 timestamp,
+  expiresAt: ISO8601 timestamp (1 hour from now)
+}
+```
+
+#### Save Recording Phase
+```
+POST /api/speakers/session/save-phase
+Headers: Content-Type: multipart/form-data, Authorization: Bearer {token}
+Form Data:
+  - sessionId: string
+  - phase: number (1, 2, or 3)
+  - audioBlob: File
+  - duration: number (seconds)
+Response (200): {
+  phaseId: string,
+  phase: number,
+  savedAt: ISO8601 timestamp,
+  nextPhase: number | null,
+  readyForNext: boolean
+}
+```
+
+---
+
+### 4. Wake Word Customization Endpoints
+
+#### Get Wake Word Settings
+```
+GET /api/wakeword/settings
+Headers: Authorization: Bearer {token}
+Response (200): {
+  wakeWord: string (e.g., "Canary"),
+  recordings: number (0-3, count of completed recordings),
+  complexity: 'easy' | 'medium' | 'hard',
+  isConfigured: boolean,
+  createdAt: ISO8601 timestamp,
+  lastUpdated: ISO8601 timestamp | null
+}
+```
+
+#### Start Wake Word Session
+```
+POST /api/wakeword/session/start
+Headers: Content-Type: application/json, Authorization: Bearer {token}
+Payload: {
+  phase: number (1, 2, or 3),
+  wakeWord: string (default: "Canary")
+}
+Response (200): {
+  sessionId: string (UUID),
+  phase: number,
+  wakeWord: string,
+  startedAt: ISO8601 timestamp,
+  expiresAt: ISO8601 timestamp
+}
+Error (422): User already has wake word configured
+```
+
+#### Save Wake Word Recording Phase
+```
+POST /api/wakeword/session/save-phase
+Headers: Content-Type: multipart/form-data, Authorization: Bearer {token}
+Form Data:
+  - sessionId: string
+  - phase: number (1, 2, or 3)
+  - audioBlob: File (audio/webm or audio/wav)
+  - duration: number (seconds, typically 3-5 seconds per phrase)
+Response (200): {
+  phaseId: string,
+  phase: number,
+  savedAt: ISO8601 timestamp,
+  quality: 'excellent' | 'good' | 'fair' | 'poor',
+  feedback: string (coaching feedback for user),
+  nextPhase: number | null,
+  allComplete: boolean
+}
+Error (400): Audio too short/long, poor quality, etc.
+```
+
+#### Finalize Wake Word Configuration
+```
+POST /api/wakeword/finalize
+Headers: Content-Type: application/json, Authorization: Bearer {token}
+Payload: {
+  recordings: [string] (array of 3 recordingIds),
+  wakeWord: string,
+  complexity: 'easy' (fixed for accessibility)
+}
+Response (200): {
+  wakeWordId: string (UUID),
+  wakeWord: string,
+  processedAt: ISO8601 timestamp,
+  accuracy: number (percentage, 70-100),
+  status: 'ready' | 'needs_improvement',
+  message: string (user-friendly confirmation message)
+}
+Error (422): Validation errors, insufficient recordings
+```
+
+---
+
+### 5. Dashboard Endpoints
+
+#### Get Dashboard Metrics
+```
+GET /api/dashboard/metrics
+Headers: Authorization: Bearer {token}
+Query Parameters: ?timeframe=day|week|month (default: day)
+Response (200): {
+  commandsProcessed: number,
+  activeSessions: number,
+  avgResponseTime: number (milliseconds),
+  accuracyRate: number (percentage, 0-100),
+  topCommands: [{ command: string, count: number }],
+  speakersActive: number,
+  chartData: {
+    timestamps: [ISO8601],
+    values: [number]
+  }
+}
+```
+
+
 
 #### Session Check
 ```

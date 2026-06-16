@@ -6,48 +6,11 @@ import { useState, useEffect } from 'react';
 interface Speaker {
   id: string;
   name: string;
-  avatar: string;
+  icon: string;
   priority: number;
   status: 'active' | 'scheduled' | 'completed';
+  isAccessible?: boolean;
 }
-
-const defaultSpeakers: Speaker[] = [
-  {
-    id: '1',
-    name: 'Voice Model Pro',
-    avatar: '/avatars/lion.png',
-    priority: 5,
-    status: 'active',
-  },
-  {
-    id: '2',
-    name: 'Canary Assistant',
-    avatar: '/avatars/owl.png',
-    priority: 4,
-    status: 'scheduled',
-  },
-  {
-    id: '3',
-    name: 'Smart Engine',
-    avatar: '/avatars/fox.png',
-    priority: 3,
-    status: 'scheduled',
-  },
-  {
-    id: '4',
-    name: 'Advanced Listener',
-    avatar: '/avatars/raven.png',
-    priority: 2,
-    status: 'completed',
-  },
-  {
-    id: '5',
-    name: 'Canary Neural',
-    avatar: '/avatars/eagle.png',
-    priority: 1,
-    status: 'scheduled',
-  },
-];
 
 const statusColors = {
   active: 'bg-green-100 text-green-700',
@@ -56,37 +19,56 @@ const statusColors = {
 };
 
 export function SpeakersList() {
-  const [speakers, setSpeakers] = useState<Speaker[]>(defaultSpeakers);
+  const [speakers, setSpeakers] = useState<Speaker[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Load speakers from sessionStorage if available
-    const storedSpeakers = sessionStorage.getItem('speakersData');
-    if (storedSpeakers) {
+    // Load speakers from the store
+    const loadSpeakers = async () => {
       try {
-        setSpeakers(JSON.parse(storedSpeakers));
+        const { getSpeakers } = await import('@/lib/speakers-store');
+        const allSpeakers = getSpeakers();
+        
+        // Transform speakers data for display
+        const displaySpeakers = allSpeakers.map((s: any) => ({
+          id: s.id,
+          name: s.name,
+          icon: s.icon,
+          priority: s.priority,
+          status: 'scheduled' as const,
+          isAccessible: s.isAccessible,
+        }));
+        
+        setSpeakers(displaySpeakers);
       } catch (err) {
-        console.error('Error parsing speakers data:', err);
-        setSpeakers(defaultSpeakers);
+        console.error('Error loading speakers:', err);
+      } finally {
+        setLoading(false);
       }
-    }
+    };
 
-    // Listen for storage changes from other tabs
+    loadSpeakers();
+
+    // Listen for storage changes
     const handleStorageChange = () => {
-      const updated = sessionStorage.getItem('speakersData');
-      if (updated) {
-        try {
-          setSpeakers(JSON.parse(updated));
-        } catch (err) {
-          console.error('Error parsing speakers data:', err);
-        }
-      }
+      loadSpeakers();
     };
 
     window.addEventListener('storage', handleStorageChange);
     return () => window.removeEventListener('storage', handleStorageChange);
   }, []);
 
-  const sortedSpeakers = [...speakers].sort((a, b) => b.priority - a.priority);
+  // Separate normal speakers and accessibility speaker
+  const normalSpeakers = speakers.filter(s => !s.isAccessible).sort((a, b) => b.priority - a.priority);
+  const accessibilitySpeaker = speakers.find(s => s.isAccessible);
+
+  if (loading) {
+    return (
+      <div className="rounded-xl border border-border bg-card p-6 shadow-sm">
+        <p className="text-muted-foreground text-sm">Loading speakers...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="rounded-xl border border-border bg-card p-6 shadow-sm">
@@ -95,17 +77,14 @@ export function SpeakersList() {
       </p>
 
       <div className="space-y-3">
-        {sortedSpeakers.map((speaker) => (
+        {/* Normal Speakers */}
+        {normalSpeakers.map((speaker) => (
           <div
             key={speaker.id}
             className="flex items-center gap-4 rounded-lg border border-border bg-secondary/30 p-4 transition-all duration-200 hover:bg-secondary/60"
           >
-            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/20">
-              <img
-                src={speaker.avatar}
-                alt={speaker.name}
-                className="h-10 w-10 rounded-full"
-              />
+            <div className="text-2xl flex-shrink-0">
+              {speaker.icon}
             </div>
 
             <div className="flex-1 min-w-0">
@@ -129,6 +108,30 @@ export function SpeakersList() {
             </div>
           </div>
         ))}
+
+        {/* Accessibility Speaker (if exists) - shown separately without priority */}
+        {accessibilitySpeaker && (
+          <div className="flex items-center gap-4 rounded-lg border-2 border-primary/40 bg-primary/5 p-4 transition-all duration-200 hover:bg-primary/10">
+            <div className="text-2xl flex-shrink-0">
+              {accessibilitySpeaker.icon}
+            </div>
+
+            <div className="flex-1 min-w-0">
+              <p className="truncate font-medium text-foreground">
+                {accessibilitySpeaker.name}
+              </p>
+              <p className="truncate text-sm text-muted-foreground">
+                Accessibility enabled
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <span className="inline-block rounded-full px-3 py-1 text-xs font-medium bg-blue-100 text-blue-700">
+                Special
+              </span>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
