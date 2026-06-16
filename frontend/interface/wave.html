@@ -42,10 +42,73 @@
   .bl.b { bottom:0;left:0;right:0;height:1px; }
   .bl.l { top:0;bottom:0;left:0;width:1px; }
   .bl.r { top:0;bottom:0;right:0;width:1px; }
+
+  /* ── Status + Button ── */
+  #status-text {
+    position: absolute; top: 130px; left: 50%; transform: translateX(-50%);
+    z-index: 10; font-size: 10px; letter-spacing: 0.22em;
+    text-transform: uppercase; color: rgba(60,60,60,0.45);
+    pointer-events: none; text-align: center;
+  }
+  #btn-wrap {
+    position: absolute; bottom: 56px; left: 50%; transform: translateX(-50%);
+    z-index: 20; display: flex; flex-direction: column; align-items: center; gap: 12px;
+  }
+  #btn-area { position: relative; width: 70px; height: 70px; }
+  #mic-btn {
+    width: 70px; height: 70px; border-radius: 50%; cursor: pointer;
+    border: 1.5px solid rgba(200,148,0,0.55); background: rgba(255,255,255,0.85);
+    backdrop-filter: blur(8px); outline: none;
+    display: flex; align-items: center; justify-content: center;
+    transition: all 0.25s ease; position: relative; z-index: 2;
+    box-shadow: 0 4px 18px rgba(0,0,0,0.05);
+  }
+  #mic-btn:hover { transform: scale(1.05); }
+  #mic-btn .dot { width: 12px; height: 12px; border-radius: 50%; background: #c89400; transition: all 0.25s; }
+
+  [data-state="listening"] #mic-btn { border-color: #c89400; box-shadow: 0 0 22px rgba(200,148,0,0.4); }
+  [data-state="listening"] #mic-btn .dot { transform: scale(1.4); }
+  [data-state="processing"] #mic-btn { border-color: #64a0ff; box-shadow: 0 0 20px rgba(100,160,255,0.4); }
+  [data-state="processing"] #mic-btn .dot { background: #64a0ff; animation: pulse 0.8s ease-in-out infinite; }
+  [data-state="done"] #mic-btn { border-color: #50c878; box-shadow: 0 0 20px rgba(80,200,120,0.4); }
+  [data-state="done"] #mic-btn .dot { background: #50c878; }
+  [data-state="error"] #mic-btn { border-color: #dc503c; }
+  [data-state="error"] #mic-btn .dot { background: #dc503c; }
+
+  @keyframes pulse { 0%,100%{transform:scale(1);} 50%{transform:scale(1.4);} }
+
+  .ripple {
+    position: absolute; top: 0; left: 0; width: 70px; height: 70px;
+    border-radius: 50%; border: 1.5px solid rgba(200,148,0,0.5);
+    pointer-events: none; animation: ripple-out 1.6s ease-out forwards;
+  }
+  @keyframes ripple-out { 0%{transform:scale(1);opacity:0.6;} 100%{transform:scale(2.8);opacity:0;} }
+
+  #btn-label {
+    font-size: 9px; letter-spacing: 0.22em; text-transform: uppercase;
+    color: rgba(60,60,60,0.45); white-space: nowrap;
+  }
+
+  #result {
+    position: absolute; bottom: 175px; left: 50%; transform: translateX(-50%);
+    z-index: 20; background: rgba(255,255,255,0.94); backdrop-filter: blur(14px);
+    border: 1px solid rgba(180,140,0,0.22); border-radius: 14px;
+    padding: 14px 22px; max-width: 460px; width: 90%;
+    display: none; flex-direction: column; gap: 5px;
+    box-shadow: 0 6px 28px rgba(0,0,0,0.08);
+  }
+  #result.show { display: flex; }
+  #r-route { font-size: 8px; letter-spacing: 0.22em; text-transform: uppercase;
+    padding: 2px 8px; border-radius: 20px; background: rgba(200,148,0,0.12);
+    color: rgba(150,100,0,0.85); border: 1px solid rgba(200,148,0,0.25); align-self: flex-start; }
+  #r-speaker { font-size: 9px; letter-spacing: 0.18em; text-transform: uppercase; color: rgba(120,90,0,0.6); }
+  #r-text { font-size: 14px; color: #2a2a28; font-style: italic; line-height: 1.5; }
+  #r-action { font-size: 14px; color: #2a2a28; line-height: 1.5; }
 </style>
 </head>
+
 <body>
-<div class="scene">
+<div class="scene" id="scene" data-state="idle">
   <canvas id="c"></canvas>
   <div class="vignette"></div>
   <div class="bl t"></div><div class="bl b"></div>
@@ -58,9 +121,228 @@
   <div class="label label-tl">DNA // WAVE</div>
   <div class="label label-tr" id="bpm">BPM ···</div>
   <div class="label label-bl" id="seq">SEQ 0001</div>
-  <div class="label label-br">LIVE</div>
+  <div class="label label-br" id="lbl-state">IDLE</div>
+
+  <div id="status-text">tap the circle to begin</div>
+
+  <div id="btn-wrap">
+    <div id="btn-area">
+      <button id="mic-btn" type="button" aria-label="Tap to speak">
+        <div class="dot"></div>
+      </button>
+    </div>
+    <div id="btn-label">tap to speak</div>
+  </div>
 </div>
+
 <script>
+/* ═══════════════════════════════════════════════════════════════════════════
+   ROUNDRECT POLYFILL  (for older browsers)
+═══════════════════════════════════════════════════════════════════════════ */
+if (!CanvasRenderingContext2D.prototype.roundRect) {
+  CanvasRenderingContext2D.prototype.roundRect = function (x, y, w, h, r) {
+    if (typeof r === 'number') r = [r, r, r, r];
+    else if (!Array.isArray(r)) r = [0,0,0,0];
+    if (r.length === 1) r = [r[0], r[0], r[0], r[0]];
+    if (r.length === 2) r = [r[0], r[1], r[0], r[1]];
+    this.beginPath();
+    this.moveTo(x + r[0], y);
+    this.lineTo(x + w - r[1], y);
+    this.quadraticCurveTo(x + w, y, x + w, y + r[1]);
+    this.lineTo(x + w, y + h - r[2]);
+    this.quadraticCurveTo(x + w, y + h, x + w - r[2], y + h);
+    this.lineTo(x + r[3], y + h);
+    this.quadraticCurveTo(x, y + h, x, y + h - r[3]);
+    this.lineTo(x, y + r[0]);
+    this.quadraticCurveTo(x, y, x + r[0], y);
+    this.closePath();
+    return this;
+  };
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   APP STATE + UI
+═══════════════════════════════════════════════════════════════════════════ */
+const API = (location.protocol === 'file:') ? 'http://localhost:8000' : '';
+const SILENCE_THRESH = 0.010;  // slightly more sensitive
+const SILENCE_MS     = 1800;
+const MAX_MS         = 15000;
+
+let appState = 'idle';   // idle | listening | processing | done | error
+let micStream = null, audioCtx = null, analyser = null, timeBuf = null;
+let mediaRec = null, chunks = [];
+let speechDetected = false, silenceStart = 0;
+let maxTimer = null, rippleTimer = null;
+let micLevel = 0;        // smoothed amplitude — drives wave amp boost
+
+const $ = (id) => document.getElementById(id);
+const scene    = $('scene');
+const btnArea  = $('btn-area');
+const btnLabel = $('btn-label');
+const lblState = $('lbl-state');
+const statusEl = $('status-text');
+const resultEl = null;  // result card removed
+
+function setStatus(text) { if (statusEl) statusEl.textContent = text; }
+function setState(s, label) {
+  appState = s;
+  scene.dataset.state = s;
+  lblState.textContent = s.toUpperCase();
+  if (label) btnLabel.textContent = label;
+  if (s === 'listening') startRipple(); else stopRipple();
+}
+
+function startRipple() {
+  stopRipple();
+  (function emit() {
+    if (appState !== 'listening') return;
+    const r = document.createElement('div');
+    r.className = 'ripple';
+    btnArea.appendChild(r);
+    r.addEventListener('animationend', () => r.remove());
+    rippleTimer = setTimeout(emit, 700);
+  })();
+}
+function stopRipple() {
+  clearTimeout(rippleTimer);
+  btnArea.querySelectorAll('.ripple').forEach(r => r.remove());
+}
+
+function showResult(d) {
+  // No-op — result card removed per user request
+  // The TTS audio is the response; visual card not needed
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   MIC INIT  (with legacy fallback for older browsers / file:// scheme)
+═══════════════════════════════════════════════════════════════════════════ */
+function getUserMediaCompat(constraints) {
+  if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+    return navigator.mediaDevices.getUserMedia(constraints);
+  }
+  const legacy = navigator.getUserMedia || navigator.webkitGetUserMedia ||
+                 navigator.mozGetUserMedia || navigator.msGetUserMedia;
+  if (!legacy) {
+    return Promise.reject(new Error(
+      'getUserMedia is not available. Open this page via http://localhost:8000/ ' +
+      '(not file://) so the browser allows microphone access.'
+    ));
+  }
+  return new Promise((res, rej) => legacy.call(navigator, constraints, res, rej));
+}
+
+async function ensureMic() {
+  if (micStream && audioCtx && audioCtx.state !== 'closed') {
+    if (audioCtx.state === 'suspended') { try { await audioCtx.resume(); } catch(_){} }
+    return true;
+  }
+  try {
+    setStatus('requesting microphone…');
+    micStream = await getUserMediaCompat({ audio: true });
+    audioCtx  = new (window.AudioContext || window.webkitAudioContext)();
+    analyser  = audioCtx.createAnalyser();
+    analyser.fftSize = 1024;
+    timeBuf   = new Float32Array(analyser.fftSize);
+    audioCtx.createMediaStreamSource(micStream).connect(analyser);
+    setStatus('ready — tap the circle');
+    return true;
+  } catch (e) {
+    console.error('[mic]', e);
+    setState('error', 'mic denied');
+    setStatus(e.message || 'microphone access denied');
+    return false;
+  }
+}
+
+function getRMS() {
+  if (!analyser || !timeBuf) return 0;
+  analyser.getFloatTimeDomainData(timeBuf);
+  let sum = 0;
+  for (let i = 0; i < timeBuf.length; i++) sum += timeBuf[i] * timeBuf[i];
+  return Math.sqrt(sum / timeBuf.length);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   RECORDING + 1.8s SILENCE VAD
+═══════════════════════════════════════════════════════════════════════════ */
+async function startRecording() {
+  if (appState === 'listening' || appState === 'processing') return;
+  if (!await ensureMic()) return;
+
+  chunks = [];
+  speechDetected = false;
+  silenceStart = 0;
+
+  const mimes = ['audio/webm;codecs=opus','audio/webm','audio/ogg;codecs=opus','audio/mp4'];
+  const mime  = mimes.find(m => MediaRecorder.isTypeSupported(m)) || '';
+
+  try {
+    mediaRec = new MediaRecorder(micStream, mime ? { mimeType: mime } : {});
+  } catch (e) {
+    setState('error', 'recorder error');
+    setStatus('MediaRecorder not supported');
+    return;
+  }
+
+  mediaRec.ondataavailable = (e) => { if (e.data && e.data.size > 0) chunks.push(e.data); };
+  mediaRec.onstop = onStopped;
+  mediaRec.start(100);
+
+  setState('listening', 'listening · tap to stop');
+  setStatus('listening — speak now');
+  maxTimer = setTimeout(stopRecording, MAX_MS);
+}
+
+function stopRecording() {
+  clearTimeout(maxTimer);
+  if (mediaRec && mediaRec.state !== 'inactive') {
+    try { mediaRec.stop(); } catch(_){}
+  }
+}
+
+async function onStopped() {
+  if (chunks.length === 0 || !speechDetected) {
+    setState('idle', 'tap to speak');
+    setStatus('no speech detected — try again');
+    return;
+  }
+  const blob = new Blob(chunks, { type: mediaRec.mimeType || 'audio/webm' });
+  if (blob.size < 2000) {   // too small to be real audio — ignore
+    setState('idle', 'tap to speak');
+    setStatus('recording too short — try again');
+    return;
+  }
+  setState('processing', 'processing…');
+  setStatus(`processing ${(blob.size / 1024).toFixed(1)} KB…`);
+
+  try {
+    const fd = new FormData();
+    fd.append('audio', blob, 'recording.webm');
+    const res  = await fetch(`${API}/api/command`, { method: 'POST', body: fd });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || ('HTTP ' + res.status));
+
+    setState('done', 'done · tap to speak again');
+    setStatus(`route: ${data.route || 'IGNORE'}`);
+    showResult(data);
+    setTimeout(() => { setState('idle', 'tap to speak'); setStatus('ready'); }, 5000);
+  } catch (e) {
+    console.error('[api]', e);
+    setState('error', 'error · tap to retry');
+    setStatus('backend: ' + e.message);
+    setTimeout(() => { setState('idle', 'tap to speak'); setStatus('ready'); }, 4500);
+  }
+}
+
+document.getElementById('mic-btn').addEventListener('click', () => {
+  if (appState === 'listening') stopRecording();
+  else if (appState === 'processing') return;
+  else startRecording();
+});
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   DNA WAVE ANIMATION  (original — verbatim)
+═══════════════════════════════════════════════════════════════════════════ */
 (function () {
   const canvas = document.getElementById('c');
   const ctx    = canvas.getContext('2d');
@@ -121,7 +403,9 @@
     const shimmer = Math.sin(x*36+t*10+strand.phaseOffset)*0.010
                   + Math.sin(x*22-t*14+strand.phaseOffset)*0.006;
     const hb = heartbeatAmp(t + strand.phaseOffset * 0.18);
-    return Math.abs(v + shimmer) * env * hb * ROWS * 0.62 * strand.ampScale;
+    /* mic-driven amplitude boost while listening */
+    const boost = 1.0 + (appState === 'listening' ? micLevel * 5.0 : 0);
+    return Math.abs(v + shimmer) * env * hb * ROWS * 0.62 * strand.ampScale * boost;
   }
 
   function strandCenter(col, t, strand) {
@@ -134,7 +418,6 @@
     return MID + drift * env * ROWS * 0.055;
   }
 
-  /* ─── SUBTLE BLOOM ─── */
   function drawFluoroBloom(t) {
     const blooms = [
       { xf:0.35, yf:0.50, hue:210, r:0.26, a:0.014 },
@@ -152,7 +435,6 @@
     }
   }
 
-  /* ─── CURSOR ─── */
   function drawCursor() {
     if (!mouse.inside) return;
     ctx.globalAlpha=0.035; ctx.strokeStyle='#555'; ctx.lineWidth=1;
@@ -163,45 +445,37 @@
     ctx.beginPath(); ctx.arc(mouse.x,mouse.y,2,0,Math.PI*2); ctx.fill();
   }
 
-  /* ─── DNA RUNGS — blended pixels, NO dark anchors ─── */
   function drawDNARungs(t) {
     const spacing = 14;
     for (let col = 0; col < COLS; col++) {
       const scroll = (t * 3.8) % spacing;
       if ((col + scroll) % spacing > 1.8) continue;
-
       const xRaw = col / COLS;
       if (xRaw < WAVE_LO + 0.04 || xRaw > WAVE_HI - 0.04) continue;
       const xN   = (xRaw - WAVE_LO) / (WAVE_HI - WAVE_LO);
       const envA = Math.pow(Math.sin(xN * Math.PI), 1.8);
       if (envA < 0.15) continue;
-
       const c0 = strandCenter(col, t, STRANDS[0]);
       const c1 = strandCenter(col, t, STRANDS[1]);
       const h0 = strandHeight(col, t, STRANDS[0]);
       const h1 = strandHeight(col, t, STRANDS[1]);
       if (h0 < 2 || h1 < 2) continue;
-
       const rowTop = Math.ceil(c0);
       const rowBot = Math.floor(c1);
       if (rowBot <= rowTop + 1) continue;
       const span = rowBot - rowTop;
-
       const baseHue0 = ((col/COLS)*280 + t*18 + STRANDS[0].colorShift) % 360;
       const baseHue1 = ((col/COLS)*280 + t*18 + STRANDS[1].colorShift) % 360;
-
       const masterA = envA * 0.52;
       const pad = Math.max(1, PX * 0.18);
       const sz  = PX - pad * 2;
       const rad = Math.max(1, sz * 0.32);
-
       for (let row = rowTop; row <= rowBot; row++) {
         if (row < 0 || row >= ROWS) continue;
         const frac = span > 0 ? (row - rowTop) / span : 0.5;
         const hue  = (baseHue0 + frac * ((baseHue1 - baseHue0 + 540) % 360 - 180) + 360) % 360;
-        /* uniform lightness — no dark anchors at all */
         const midBulge = 1 - Math.pow(frac * 2 - 1, 2) * 0.3;
-        const light    = 38 + midBulge * 16;   /* 38–54% — always mid-tone, never dark */
+        const light    = 38 + midBulge * 16;
         const alpha    = masterA * (0.6 + midBulge * 0.4);
         ctx.globalAlpha = Math.min(alpha, 0.68);
         ctx.fillStyle   = `hsl(${hue},78%,${light}%)`;
@@ -209,13 +483,10 @@
         ctx.roundRect(col * PX + pad, row * PX + pad, sz, sz, rad);
         ctx.fill();
       }
-      /* NO anchor pixels — nothing dark */
     }
   }
 
-  /* ─── PIXEL BURST — only on a genuine big blast ─── */
   const sparks = [];
-  /* Track per-column peak to detect sudden big surges */
   const peakTrack = {};
 
   function spawnPixelBurst(cx, cy, hue, count) {
@@ -228,17 +499,14 @@
         x: cx, y: cy,
         vx: Math.cos(angle) * speed,
         vy: Math.sin(angle) * speed - (0.6 + Math.random() * 1.0),
-        sz,
-        rot:  Math.random() * Math.PI * 2,
+        sz, rot:  Math.random() * Math.PI * 2,
         rotV: (Math.random()-0.5) * 0.20,
-        life: 1.0,
-        decay: 0.016 + Math.random() * 0.014,
+        life: 1.0, decay: 0.016 + Math.random() * 0.014,
         hue:  (hue + (Math.random()-0.5)*25) % 360,
-        light: 22 + Math.random() * 20,
+        light: 45 + Math.random() * 25,
       });
     }
   }
-
   function tickSparks() {
     for (let i = sparks.length-1; i >= 0; i--) {
       const s = sparks[i];
@@ -249,25 +517,22 @@
       if (s.life <= 0) sparks.splice(i, 1);
     }
   }
-
   function drawSparks() {
     for (const s of sparks) {
       const fade  = s.life < 0.28 ? s.life / 0.28 : 1.0;
-      const alpha = fade * 0.90;
       ctx.save();
-      ctx.globalAlpha = alpha;
+      ctx.globalAlpha = fade * 0.90;
       ctx.translate(s.x, s.y);
       ctx.rotate(s.rot);
       ctx.fillStyle = `hsl(${s.hue},88%,${s.light}%)`;
       ctx.fillRect(-s.sz/2, -s.sz/2, s.sz, s.sz);
-      ctx.globalAlpha = alpha * 0.40;
+      ctx.globalAlpha = fade * 0.40;
       ctx.fillStyle = `hsl(${s.hue},70%,${s.light+32}%)`;
       ctx.fillRect(-s.sz/2, -s.sz/2, s.sz * 0.38, s.sz * 0.38);
       ctx.restore();
     }
   }
 
-  /* ─── BPM ─── */
   let bpmVal=72, bpmF=0;
   function updateBPM(hb) {
     bpmVal = hb>1.4 ? 72+Math.floor(hb*9) : Math.max(72,bpmVal-0.2);
@@ -280,6 +545,26 @@
   let t=0, frame=0;
 
   function draw() {
+    /* ── Update mic level + run VAD while listening ── */
+    if (analyser) {
+      const rms = getRMS();
+      micLevel += (rms - micLevel) * 0.25;
+      if (appState === 'listening') {
+        if (rms > SILENCE_THRESH) {
+          if (!speechDetected) { speechDetected = true; setStatus('hearing you…'); }
+          silenceStart = 0;
+        } else if (speechDetected) {
+          if (!silenceStart) silenceStart = Date.now();
+          else if (Date.now() - silenceStart >= SILENCE_MS) {
+            setStatus('silence detected — stopping');
+            stopRecording();
+          }
+        }
+      }
+    } else {
+      micLevel *= 0.92;
+    }
+
     ctx.globalAlpha=1;
     ctx.fillStyle='#f5f5f3';
     ctx.fillRect(0,0,W,H);
@@ -311,19 +596,15 @@
           ctx.beginPath(); ctx.arc(cx,cy,half*PX*1.0,0,Math.PI*2); ctx.fill();
         }
 
-        /* ── Pixel burst ONLY on genuine large-amplitude spikes ── */
         if (!isFaint && frame%4===si%4) {
           const colKey = `${si}_${col}`;
           const prev   = peakTrack[colKey] || 0;
-          const surge  = half - prev;               /* how much it grew this frame */
-          /* fire only when: wave is very tall AND it surged upward sharply */
-          if (half > ROWS * 0.22 && surge > ROWS * 0.04) {
+          const surge  = half - prev;
+          if (half > ROWS * 0.22 && surge > ROWS * 0.04)
             spawnPixelBurst(cx, top*PX, baseHue, Math.floor(3 + Math.random()*4));
-          }
           peakTrack[colKey] = half;
         }
 
-        /* Pixel body */
         for (let row=top; row<=bot; row++) {
           if (row<0||row>=ROWS) continue;
           const dist  = Math.abs(row-center) / Math.max(half,1);
@@ -332,7 +613,7 @@
           const alpha = Math.min(Math.max(core,body),1.0) * aScale;
           if (alpha < 0.02) continue;
           const hue   = (baseHue + dist*28) % 360;
-          const light = 12 + dist * 26;
+          const light = 42 + dist * 22;
           ctx.globalAlpha = alpha;
           ctx.fillStyle   = `hsl(${hue},92%,${light}%)`;
           const pad = Math.max(1, PX*0.10);
@@ -341,7 +622,6 @@
           ctx.roundRect(col*PX+pad, row*PX+pad, PX-pad*2, PX-pad*2, rad);
           ctx.fill();
         }
-        /* no spine */
       }
     }
 
@@ -356,6 +636,17 @@
 
   draw();
 }());
+
+console.log('[canary] wave.html loaded — API base:', API || '(same origin)');
+
+// Warm mic on page load — eliminates calibration gap when user clicks
+// Uses a user-gesture fallback since some browsers need interaction first
+document.addEventListener('click', function warmOnce() {
+  ensureMic();
+  document.removeEventListener('click', warmOnce);
+}, { once: true });
+// Also try immediately (works on http://localhost since it's a secure context)
+ensureMic().catch(() => {});
 </script>
 </body>
 </html>

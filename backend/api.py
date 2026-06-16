@@ -27,6 +27,8 @@ import soundfile as sf
 
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 
 # ── Ensure project root is importable ─────────────────────────────────────────
 _PROJECT_ROOT = Path(__file__).parent.parent
@@ -62,6 +64,17 @@ app = FastAPI(
     version="1.0.0",
 )
 
+
+@app.on_event("startup")
+async def _startup_banner():
+    print()
+    print("  ╔══════════════════════════════════════════════════╗")
+    print("  ║   THE CANARY API  —  v2 (dedupe + outputs/)     ║")
+    print("  ║   /api/command saves to outputs/<timestamp>/    ║")
+    print("  ║   single-speaker dedupe + faint-stream gate ON  ║")
+    print("  ╚══════════════════════════════════════════════════╝")
+    print()
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -72,16 +85,40 @@ app.add_middleware(
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+#  Serve the voice interface (wave.html) at the root URL
+# ─────────────────────────────────────────────────────────────────────────────
+_INTERFACE_DIR = _PROJECT_ROOT / "frontend" / "interface"
+
+
+@app.get("/")
+async def root():
+    """Serve wave.html at http://localhost:8000/"""
+    wave = _INTERFACE_DIR / "wave.html"
+    if wave.exists():
+        return FileResponse(str(wave), media_type="text/html")
+    raise HTTPException(status_code=404, detail="wave.html not found")
+
+
+# Serve any other files in frontend/interface (CSS, JS, images if added later)
+if _INTERFACE_DIR.exists():
+    app.mount(
+        "/interface",
+        StaticFiles(directory=str(_INTERFACE_DIR), html=True),
+        name="interface",
+    )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 #  HELPERS
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _ffmpeg_to_wav(src: Path, dst: Path) -> None:
-    """Convert any audio file (webm/opus/mp3/m4a/etc.) to mono 16 kHz PCM WAV via ffmpeg.
-
-    Raises RuntimeError if ffmpeg is missing or the conversion fails.
-    """
+    """Convert any audio file (webm/opus/mp3/m4a/etc.) to mono 16 kHz PCM WAV via ffmpeg."""
     import shutil as _shutil
     import subprocess
+
+    if src.stat().st_size < 1000:
+        raise RuntimeError(f"Audio file too small ({src.stat().st_size} bytes) — likely empty recording.")
 
     ffmpeg = _shutil.which("ffmpeg") or "/opt/homebrew/bin/ffmpeg"
     if not Path(ffmpeg).exists():
@@ -157,6 +194,13 @@ async def command_endpoint(audio: UploadFile = File(...)):
 
     tmp_dir = Path(tempfile.mkdtemp(prefix="canary_api_"))
 
+    # Also persist to outputs/<timestamp>/ just like run_canary.py
+    import datetime as _dt
+    _ts = _dt.datetime.now().strftime("%Y%m%d_%H%M%S")
+    out_dir = _PROJECT_ROOT / "outputs" / _ts
+    out_dir.mkdir(parents=True, exist_ok=True)
+    print(f"\n  [api] /api/command  →  outputs/{_ts}/")
+
     try:
         # 1. Save uploaded audio to temp file
         raw_path = tmp_dir / "raw_input.wav"
@@ -164,7 +208,10 @@ async def command_endpoint(audio: UploadFile = File(...)):
         raw_path.write_bytes(content)
 
         # 2. Load as numpy float32 @ 16kHz
-        raw = _load_audio_as_float32(raw_path)
+        try:
+            raw = _load_audio_as_float32(raw_path)
+        except Exception as audio_err:
+            raise HTTPException(status_code=422, detail=f"Could not decode audio: {audio_err}")
 
         # Re-save as proper WAV (in case input was WebM or other format)
         sf.write(str(raw_path), raw, SAMPLE_RATE, subtype="PCM_16")
@@ -188,7 +235,7 @@ async def command_endpoint(audio: UploadFile = File(...)):
             estimator = SpeakerCountEstimator(sample_rate=SAMPLE_RATE, max_speakers=3)
             est_spk = estimator.estimate(raw)
         except Exception:
-            est_spk = 2
+            est_spk = 1  # default to single speaker — never force separation on one voice
 
         # 4. Separation
         if est_spk >= 3:
@@ -202,7 +249,21 @@ async def command_endpoint(audio: UploadFile = File(...)):
             streams = _reduce_crosstalk(streams)
             streams = sorted(streams,
                              key=lambda s: _speech_band_rms(s, SAMPLE_RATE), reverse=True)
-            overlap_prob = _temporal_overlap(streams[0], streams[1], SAMPLE_RATE)
+
+            # ── Energy-ratio gate: drop streams that are likely SepFormer artifacts ──
+            top_rms = _speech_band_rms(streams[0], SAMPLE_RATE)
+            kept = [streams[0]]
+            for s in streams[1:]:
+                ratio = _speech_band_rms(s, SAMPLE_RATE) / (top_rms + 1e-10)
+                if ratio >= 0.30:   # only keep streams ≥30% of dominant
+                    kept.append(s)
+            if len(kept) < len(streams):
+                print(f"  [api] dropped {len(streams)-len(kept)} faint stream(s) (likely artifact)")
+            streams = kept
+            n_spk   = len(streams)
+
+            if len(streams) >= 2:
+                overlap_prob = _temporal_overlap(streams[0], streams[1], SAMPLE_RATE)
 
         # 5. Enhancement + save WAVs
         saved = []
@@ -238,8 +299,51 @@ async def command_endpoint(audio: UploadFile = File(...)):
         except Exception:
             pass
 
+        # 7b. DEDUPLICATE — if SepFormer split one voice into multiple streams that
+        # all identify as the same enrolled speaker, keep only the highest-confidence one.
+        if voice_ids and len(saved) >= 2:
+            by_name = {}
+            for fname in saved:
+                r = voice_ids.get(fname, {})
+                name = r.get("speaker", "UNKNOWN")
+                conf = float(r.get("confidence", 0.0))
+                if name == "UNKNOWN":
+                    continue
+                if name not in by_name or conf > by_name[name]["conf"]:
+                    by_name[name] = {"fname": fname, "conf": conf}
+
+            keep = {e["fname"] for e in by_name.values()}
+            # keep UNKNOWN streams too (they might be real other speakers)
+            keep.update(f for f in saved if voice_ids.get(f, {}).get("speaker") == "UNKNOWN")
+
+            if len(keep) < len(saved):
+                dropped = [f for f in saved if f not in keep]
+                print(f"  [dedupe] same-speaker duplicates dropped: {dropped}")
+                saved     = [f for f in saved if f in keep]
+                voice_ids = {f: voice_ids[f] for f in saved if f in voice_ids}
+                # Also trim streams list to match
+                if streams and len(streams) > len(saved):
+                    streams = streams[:len(saved)]
+                n_spk = len(saved)
+
         # 8. DRS shadow
         drs = drs_shadow(raw, SAMPLE_RATE, n_spk, streams)
+
+        # ── Persist to outputs/<timestamp>/ (mirrors run_canary.py behaviour) ──
+        import shutil as _shutil
+        try:
+            # raw input
+            _shutil.copy2(str(tmp_dir / "raw_input.wav"), str(out_dir / "raw_input.wav"))
+            # speaker wavs + txt
+            for fname in saved:
+                src_wav = tmp_dir / fname
+                if src_wav.exists():
+                    _shutil.copy2(str(src_wav), str(out_dir / fname))
+                src_txt = tmp_dir / fname.replace(".wav", ".txt")
+                if src_txt.exists():
+                    _shutil.copy2(str(src_txt), str(out_dir / fname.replace(".wav", ".txt")))
+        except Exception as _cp_err:
+            print(f"  [outputs] copy failed (non-fatal): {_cp_err}")
 
         # 9. Context engine (builds context.json + response.json)
         try:
@@ -256,20 +360,32 @@ async def command_endpoint(audio: UploadFile = File(...)):
             if alt.exists():
                 response_path = alt
 
+        response_payload = {"route": "IGNORE"}
         if response_path.exists():
-            response_payload = json.loads(response_path.read_text(encoding="utf-8"))
-        else:
-            response_payload = {"route": "IGNORE"}
+            try:
+                response_payload = json.loads(response_path.read_text(encoding="utf-8"))
+            except Exception as _rj_err:
+                print(f"  [api] response.json parse failed: {_rj_err}")
+
+            # Persist response.json + context.json to outputs/
+            try:
+                import shutil as _shutil2
+                _shutil2.copy2(str(response_path), str(out_dir / "response.json"))
+                ctx_src = tmp_dir / "context.json"
+                if ctx_src.exists():
+                    _shutil2.copy2(str(ctx_src), str(out_dir / "context.json"))
+            except Exception as _cp2_err:
+                print(f"  [api] outputs/ copy failed: {_cp2_err}")
 
         route = response_payload.get("route", "IGNORE")
-        active_command = response_payload.get("active_command", {})
+        active_command = response_payload.get("active_command") or {}
 
         # Extract key fields from response
         transcript = active_command.get("transcript", "")
-        speaker = active_command.get("identity", "UNKNOWN")
-        domain = active_command.get("domain", "UNKNOWN")
-        entities = active_command.get("entities", {})
-        polarity = active_command.get("polarity", "POSITIVE")
+        speaker    = active_command.get("identity", "UNKNOWN")
+        domain     = active_command.get("domain", "UNKNOWN")
+        entities   = active_command.get("entities", {})
+        polarity   = active_command.get("polarity", "POSITIVE")
         known_user = active_command.get("known_user", False)
 
         # 11. Execute intent if route != IGNORE
@@ -318,7 +434,10 @@ async def command_endpoint(audio: UploadFile = File(...)):
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Pipeline error: {e}")
+        import traceback
+        tb = traceback.format_exc()
+        print(f"\n  [api] PIPELINE ERROR:\n{tb}\n")
+        raise HTTPException(status_code=500, detail=f"Pipeline error: {type(e).__name__}: {e}")
     finally:
         # Cleanup temp directory
         import shutil
@@ -713,3 +832,118 @@ async def status_endpoint():
         "db_exists": db_path.exists(),
         "status": "ok",
     }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  POST /api/run   &   GET /api/run/result
+#  Trigger run_canary.py as a subprocess and poll for the result.
+# ─────────────────────────────────────────────────────────────────────────────
+import subprocess as _subprocess
+import threading as _threading
+
+_run_lock   = _threading.Lock()
+_run_state  = {"status": "idle", "result": None, "error": None, "proc": None}
+
+
+def _launch_run_canary():
+    """Runs run_canary.py in the background, updates _run_state when done."""
+    global _run_state
+    python  = sys.executable
+    script  = str(_PROJECT_ROOT / "run_canary.py")
+    resp_p  = _PROJECT_ROOT / "response.json"
+
+    # Clear previous result
+    with _run_lock:
+        _run_state["status"] = "running"
+        _run_state["result"] = None
+        _run_state["error"]  = None
+
+    try:
+        proc = _subprocess.Popen(
+            [python, script],
+            cwd=str(_PROJECT_ROOT),
+            stdout=_subprocess.PIPE,
+            stderr=_subprocess.STDOUT,
+            text=True,
+        )
+        with _run_lock:
+            _run_state["proc"] = proc
+
+        stdout, _ = proc.communicate(timeout=60)
+
+        if proc.returncode != 0:
+            with _run_lock:
+                _run_state["status"] = "error"
+                _run_state["error"]  = f"run_canary exited {proc.returncode}"
+            return
+
+        # Read response.json written by the pipeline
+        result = {}
+        if resp_p.exists():
+            try:
+                result = json.loads(resp_p.read_text(encoding="utf-8"))
+            except Exception:
+                result = {}
+
+        with _run_lock:
+            _run_state["status"] = "done"
+            _run_state["result"] = result
+            _run_state["proc"]   = None
+
+    except _subprocess.TimeoutExpired:
+        proc.kill()
+        with _run_lock:
+            _run_state["status"] = "error"
+            _run_state["error"]  = "timeout (>60 s)"
+            _run_state["proc"]   = None
+    except Exception as e:
+        with _run_lock:
+            _run_state["status"] = "error"
+            _run_state["error"]  = str(e)
+            _run_state["proc"]   = None
+
+
+@app.post("/api/run")
+async def run_endpoint():
+    """
+    Launch run_canary.py (records from local mic, runs full pipeline).
+    Returns immediately; poll GET /api/run/result for completion.
+    """
+    with _run_lock:
+        if _run_state["status"] == "running":
+            return {"started": False, "reason": "already running"}
+        _run_state["status"] = "running"
+        _run_state["result"] = None
+        _run_state["error"]  = None
+
+    t = _threading.Thread(target=_launch_run_canary, daemon=True)
+    t.start()
+    return {"started": True}
+
+
+@app.post("/api/run/stop")
+async def run_stop_endpoint():
+    """Send SIGTERM to the running run_canary.py process."""
+    import signal as _signal
+    with _run_lock:
+        proc = _run_state.get("proc")
+        if proc and proc.poll() is None:
+            try:
+                proc.send_signal(_signal.SIGTERM)
+            except Exception:
+                pass
+            _run_state["status"] = "idle"
+            _run_state["proc"]   = None
+            return {"stopped": True}
+    return {"stopped": False, "reason": "not running"}
+
+
+@app.get("/api/run/result")
+async def run_result_endpoint():
+    """Poll this until status == 'done' or 'error'."""
+    with _run_lock:
+        return {
+            "status": _run_state["status"],
+            "result": _run_state["result"],
+            "error":  _run_state["error"],
+        }

@@ -1,8 +1,0 @@
-[Language: en]
-[Status: ✓  READY — meaningful speech detected]
-[RMS: -19.2 dBFS | Speech ratio: 38%]
-
-can you put the weather for today?
-
---- Segments ---
-[0.00s → 4.00s] Can you put the weather for today?  [low confidence]
