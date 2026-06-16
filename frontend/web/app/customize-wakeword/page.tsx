@@ -2,7 +2,8 @@
 
 import { useState, useRef, useEffect, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { Mic, MicOff, ArrowLeft, Volume2, CheckCircle2, Zap, Radio, Headphones } from 'lucide-react';
+import { Mic, MicOff, ArrowLeft, CheckCircle2, Zap, Radio, Headphones, Play, Pause, Square } from 'lucide-react';
+import { changeBackendWakeword } from '@/lib/api';
 
 export default function CustomizeWakewordPage() {
   const router = useRouter();
@@ -19,9 +20,59 @@ export default function CustomizeWakewordPage() {
   const chunksRef = useRef<Blob[]>([]);
   const animationRef = useRef<number | null>(null);
   const recognitionRef = useRef<any>(null);
-  
-  const maxDecibels = 90;
-  const minDecibels = 30;
+
+  // Playback state for completed recordings
+  const playbackRef = useRef<HTMLAudioElement | null>(null);
+  const [playingIndex, setPlayingIndex] = useState<number | null>(null);
+  const [isPausedIndex, setIsPausedIndex] = useState<number | null>(null);
+
+  const handlePlay = (index: number) => {
+    // Stop any current playback
+    if (playbackRef.current) {
+      playbackRef.current.pause();
+      playbackRef.current.src = '';
+      playbackRef.current = null;
+    }
+    // If clicking the currently playing one, treat as stop
+    if (playingIndex === index) {
+      setPlayingIndex(null);
+      setIsPausedIndex(null);
+      return;
+    }
+    const url = URL.createObjectURL(recordings[index]);
+    const audio = new Audio(url);
+    playbackRef.current = audio;
+    setPlayingIndex(index);
+    setIsPausedIndex(null);
+    audio.play();
+    audio.onended = () => {
+      URL.revokeObjectURL(url);
+      setPlayingIndex(null);
+      setIsPausedIndex(null);
+      playbackRef.current = null;
+    };
+  };
+
+  const handlePause = () => {
+    if (!playbackRef.current) return;
+    if (playbackRef.current.paused) {
+      playbackRef.current.play();
+      setIsPausedIndex(null);
+    } else {
+      playbackRef.current.pause();
+      setIsPausedIndex(playingIndex);
+    }
+  };
+
+  const handleStop = () => {
+    if (playbackRef.current) {
+      playbackRef.current.pause();
+      playbackRef.current.src = '';
+      playbackRef.current = null;
+    }
+    setPlayingIndex(null);
+    setIsPausedIndex(null);
+  };
 
   // Initialize speech recognition
   useEffect(() => {
@@ -71,8 +122,8 @@ export default function CustomizeWakewordPage() {
       const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
       const analyser = audioContext.createAnalyser();
       analyserRef.current = analyser;
-      analyser.minDecibels = minDecibels;
-      analyser.maxDecibels = maxDecibels;
+      analyser.minDecibels = -90;
+      analyser.maxDecibels = -10;
 
       const source = audioContext.createMediaStreamSource(stream);
       source.connect(analyser);
@@ -141,15 +192,16 @@ export default function CustomizeWakewordPage() {
   };
 
   const handleComplete = async () => {
-    // TODO: API Integration - Process and finalize wake word
-    // POST /api/wakeword/finalize
-    // Payload: { recordings: Blob[], detectedText: string, complexity: 'easy' }
-    // Response: { wakeWordId: string, accuracy: number, status: 'ready' }
-    if (recordings.length === 3) {
-      alert('Wake word successfully configured!');
+    if (recordings.length !== 3) return;
+    try {
+      const result = await changeBackendWakeword(recordings);
+      alert(`Wake word set to "${result.word}". Generated ${result.variants_generated} phonetic variants.`);
       startTransition(() => {
-        router.push('/add-speaker');
+        router.push('/dashboard');
       });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Wake-word change failed.';
+      alert(msg);
     }
   };
 
@@ -242,7 +294,7 @@ export default function CustomizeWakewordPage() {
             <div className="w-full max-w-lg">
               <div className="text-center mb-12">
                 <h2 className="text-3xl font-bold text-foreground font-manrope mb-2">
-                  Recording {recordingPhase} of 3
+                  Recording {Math.min(recordings.length + 1, 3)} of 3
                 </h2>
                 <p className={`text-sm transition-colors ${
                   isSpeaking ? 'text-primary font-semibold' : 'text-muted-foreground'
@@ -295,7 +347,7 @@ export default function CustomizeWakewordPage() {
                 {!isRecording ? (
                   <button
                     onClick={startRecording}
-                    disabled={recordingPhase === 3}
+                    disabled={recordings.length >= 3}
                     className="px-8 py-4 bg-primary text-primary-foreground rounded-lg font-semibold transition-all hover:shadow-lg hover:shadow-primary/40 disabled:opacity-50 disabled:cursor-not-allowed text-lg"
                   >
                     Start Recording
@@ -372,34 +424,74 @@ export default function CustomizeWakewordPage() {
             <div>
               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Recording Boxes</p>
               <div className="space-y-3">
-                {[1, 2, 3].map((i) => (
-                  <div 
-                    key={i} 
-                    className={`px-4 py-4 rounded-lg border-2 transition-all ${
-                      recordings.length >= i
-                        ? 'bg-green-50 border-green-300'
-                        : recordingPhase === i
-                        ? 'bg-primary/10 border-primary'
-                        : 'bg-secondary/20 border-secondary/40'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
+                {[1, 2, 3].map((i) => {
+                  const idx = i - 1;
+                  const isDone = recordings.length >= i;
+                  const isActive = recordingPhase === i && !isDone;
+                  const isThisPlaying = playingIndex === idx;
+                  const isThisPaused = isPausedIndex === idx;
+
+                  return (
+                    <div
+                      key={i}
+                      className={`px-4 py-4 rounded-lg border-2 transition-all ${
+                        isDone
+                          ? 'bg-green-50 border-green-300'
+                          : isActive
+                          ? 'bg-primary/10 border-primary'
+                          : 'bg-secondary/20 border-secondary/40'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
                         <span className="text-sm font-semibold text-foreground">Recording {i}</span>
+                        {isDone ? (
+                          <CheckCircle2 className="w-5 h-5 text-green-600" />
+                        ) : isActive ? (
+                          <div className="w-5 h-5 rounded-full border-2 border-primary animate-spin border-t-transparent" />
+                        ) : (
+                          <div className="w-5 h-5 rounded-full border-2 border-secondary/40" />
+                        )}
                       </div>
-                      {recordings.length >= i ? (
-                        <CheckCircle2 className="w-5 h-5 text-green-600" />
-                      ) : recordingPhase === i ? (
-                        <div className="w-5 h-5 rounded-full border-2 border-primary animate-spin border-t-transparent"></div>
-                      ) : (
-                        <div className="w-5 h-5 rounded-full border-2 border-secondary/40"></div>
+
+                      {isDone && (
+                        <div className="mt-3 flex items-center gap-1.5">
+                          {/* Play / Pause toggle */}
+                          <button
+                            type="button"
+                            onClick={() => isThisPlaying && !isThisPaused ? handlePause() : isThisPaused ? handlePause() : handlePlay(idx)}
+                            className="flex items-center justify-center w-8 h-8 rounded-full bg-green-600 hover:bg-green-700 text-white transition-colors"
+                            aria-label={isThisPlaying && !isThisPaused ? 'Pause' : 'Play'}
+                          >
+                            {isThisPlaying && !isThisPaused
+                              ? <Pause className="w-3.5 h-3.5" />
+                              : <Play className="w-3.5 h-3.5 ml-0.5" />
+                            }
+                          </button>
+
+                          {/* Stop — only shown while this one is active */}
+                          {(isThisPlaying || isThisPaused) && (
+                            <button
+                              type="button"
+                              onClick={handleStop}
+                              className="flex items-center justify-center w-8 h-8 rounded-full bg-secondary hover:bg-secondary/80 text-foreground transition-colors"
+                              aria-label="Stop"
+                            >
+                              <Square className="w-3 h-3" />
+                            </button>
+                          )}
+
+                          <span className="text-xs text-green-700 ml-1">
+                            {isThisPlaying && !isThisPaused
+                              ? 'Playing…'
+                              : isThisPaused
+                              ? 'Paused'
+                              : '✓ Recorded'}
+                          </span>
+                        </div>
                       )}
                     </div>
-                    {recordings.length >= i && (
-                      <p className="text-xs text-green-700 mt-2">✓ Completed</p>
-                    )}
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
 

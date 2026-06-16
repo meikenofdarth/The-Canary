@@ -75,18 +75,70 @@ app.add_middleware(
 #  HELPERS
 # ─────────────────────────────────────────────────────────────────────────────
 
+def _ffmpeg_to_wav(src: Path, dst: Path) -> None:
+    """Convert any audio file (webm/opus/mp3/m4a/etc.) to mono 16 kHz PCM WAV via ffmpeg.
+
+    Raises RuntimeError if ffmpeg is missing or the conversion fails.
+    """
+    import shutil as _shutil
+    import subprocess
+
+    ffmpeg = _shutil.which("ffmpeg") or "/opt/homebrew/bin/ffmpeg"
+    if not Path(ffmpeg).exists():
+        raise RuntimeError("ffmpeg not found on PATH. Install with: brew install ffmpeg")
+
+    # -y overwrite, -i input, -ac 1 mono, -ar 16000 Hz, -acodec pcm_s16le 16-bit PCM, -f wav
+    cmd = [
+        ffmpeg, "-y", "-loglevel", "error",
+        "-i", str(src),
+        "-ac", "1",
+        "-ar", str(SAMPLE_RATE),
+        "-acodec", "pcm_s16le",
+        "-f", "wav",
+        str(dst),
+    ]
+    proc = subprocess.run(cmd, capture_output=True, text=True)
+    if proc.returncode != 0:
+        raise RuntimeError(f"ffmpeg conversion failed: {proc.stderr.strip()}")
+
+
 def _load_audio_as_float32(path: Path) -> np.ndarray:
-    """Load any audio file as mono float32 @ 16kHz."""
-    audio, sr = sf.read(str(path), dtype="float32", always_2d=False)
-    if audio.ndim == 2:
-        audio = audio.mean(axis=1)
-    if sr != SAMPLE_RATE:
-        import torchaudio
-        import torch
-        audio = torchaudio.functional.resample(
-            torch.from_numpy(audio).unsqueeze(0), sr, SAMPLE_RATE
-        ).squeeze(0).numpy()
-    return audio.astype(np.float32)
+    """Load any audio file as mono float32 @ 16kHz.
+
+    Tries soundfile first (fast, handles WAV/FLAC/OGG-Vorbis).
+    Falls back to ffmpeg subprocess for everything else (WebM/Opus/MP3/M4A/etc.).
+    """
+    import torch, torchaudio
+
+    # Path 1: soundfile direct (fastest for WAV)
+    try:
+        audio, sr = sf.read(str(path), dtype="float32", always_2d=False)
+        if isinstance(audio, np.ndarray) and audio.ndim == 2:
+            audio = audio.mean(axis=1)
+        audio = audio.astype(np.float32)
+        if sr != SAMPLE_RATE:
+            waveform_t = torch.from_numpy(audio).unsqueeze(0)
+            audio = torchaudio.functional.resample(
+                waveform_t, sr, SAMPLE_RATE
+            ).squeeze(0).numpy()
+        return audio.astype(np.float32)
+    except Exception:
+        pass
+
+    # Path 2: ffmpeg → temp WAV → soundfile
+    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
+        tmp_wav = Path(tmp.name)
+    try:
+        _ffmpeg_to_wav(path, tmp_wav)
+        audio, sr = sf.read(str(tmp_wav), dtype="float32", always_2d=False)
+        if isinstance(audio, np.ndarray) and audio.ndim == 2:
+            audio = audio.mean(axis=1)
+        return audio.astype(np.float32)
+    finally:
+        try:
+            tmp_wav.unlink()
+        except OSError:
+            pass
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -316,15 +368,46 @@ async def enroll_endpoint(
         dest = voices_dir / f"sample_{idx}.wav"
         content = await f.read()
 
-        # Write raw bytes first
-        dest.write_bytes(content)
+        # Detect actual format from the upload filename / content-type
+        # Browser MediaRecorder sends audio/webm (Opus) regardless of file extension.
+        # We write to a temp file with the correct extension so torchaudio / ffmpeg
+        # can decode it, then re-encode as proper 16-bit PCM WAV at 16 kHz.
+        original_ext = ".webm"
+        if f.filename:
+            original_ext = Path(f.filename).suffix or ".webm"
+        elif f.content_type:
+            ct = f.content_type.lower()
+            if "ogg" in ct:
+                original_ext = ".ogg"
+            elif "mp3" in ct or "mpeg" in ct:
+                original_ext = ".mp3"
+            elif "wav" in ct:
+                original_ext = ".wav"
 
-        # Convert to proper WAV if needed
+        tmp_raw = dest.with_suffix(original_ext)
+        tmp_raw.write_bytes(content)
+
         try:
-            audio_data = _load_audio_as_float32(dest)
+            audio_data = _load_audio_as_float32(tmp_raw)
             sf.write(str(dest), audio_data, SAMPLE_RATE, subtype="PCM_16")
-        except Exception:
-            pass  # If it's already a valid WAV, fine
+            # Remove the temp raw file once we have the WAV
+            if tmp_raw != dest:
+                try:
+                    tmp_raw.unlink()
+                except OSError:
+                    pass
+        except Exception as conv_err:
+            # If decode failed, try one more time treating it as raw WAV bytes
+            try:
+                dest.write_bytes(content)
+                audio_data = _load_audio_as_float32(dest)
+                sf.write(str(dest), audio_data, SAMPLE_RATE, subtype="PCM_16")
+            except Exception:
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"Could not decode audio file {idx}: {conv_err}. "
+                           "Please upload a supported format (WAV, WebM, MP3, OGG)."
+                )
 
         saved_paths.append(str(dest))
 
@@ -387,16 +470,36 @@ async def change_wakeword_endpoint(
 
         for idx, f in enumerate(audio_files[:3], start=1):
             # Save to temp
+            # Save to temp — detect real format from upload metadata
+            original_ext = ".webm"
+            if f.filename:
+                original_ext = Path(f.filename).suffix or ".webm"
+            elif f.content_type:
+                ct = f.content_type.lower()
+                if "ogg" in ct:
+                    original_ext = ".ogg"
+                elif "mp3" in ct or "mpeg" in ct:
+                    original_ext = ".mp3"
+                elif "wav" in ct:
+                    original_ext = ".wav"
+
+            tmp_raw = tmp_dir / f"ww_{idx}{original_ext}"
             tmp_path = tmp_dir / f"ww_{idx}.wav"
             content = await f.read()
-            tmp_path.write_bytes(content)
+            tmp_raw.write_bytes(content)
 
-            # Convert to proper WAV
+            # Convert browser audio (WebM/Opus/MP3) → 16 kHz mono PCM WAV
             try:
-                audio_data = _load_audio_as_float32(tmp_path)
+                audio_data = _load_audio_as_float32(tmp_raw)
                 sf.write(str(tmp_path), audio_data, SAMPLE_RATE, subtype="PCM_16")
-            except Exception:
-                pass
+                if tmp_raw != tmp_path:
+                    try:
+                        tmp_raw.unlink()
+                    except OSError:
+                        pass
+            except Exception as conv_err:
+                print(f"    [wakeword] Audio conversion error for file {idx}: {conv_err}")
+                continue  # skip this recording rather than crashing
 
             # Transcribe with Whisper
             try:
@@ -539,6 +642,49 @@ async def users_endpoint():
         return {"users": users, "count": len(users)}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Database error: {e}")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  DELETE /api/users/{name}
+# ─────────────────────────────────────────────────────────────────────────────
+
+@app.delete("/api/users/{name}")
+async def delete_user_endpoint(name: str):
+    """
+    Delete an enrolled speaker by name.
+    Removes the DB row, recordings table entries, and the on-disk Voices/<name>/ folder.
+    """
+    from database.canary_db import delete_user, get_user
+    import shutil
+
+    if not name or not name.strip():
+        raise HTTPException(status_code=400, detail="Name is required.")
+
+    name = name.strip()
+
+    # Verify user exists before any destructive work
+    user = get_user(name)
+    if user is None:
+        raise HTTPException(status_code=404, detail=f"User '{name}' not found.")
+
+    # Remove from DB (also clears recordings table due to FK)
+    try:
+        ok = delete_user(name)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Database error: {e}")
+
+    if not ok:
+        raise HTTPException(status_code=404, detail=f"User '{name}' not found.")
+
+    # Remove on-disk voice profile folder (best-effort)
+    voices_dir = _PROJECT_ROOT / "database" / "Voices" / name
+    try:
+        if voices_dir.exists():
+            shutil.rmtree(voices_dir, ignore_errors=True)
+    except Exception:
+        pass  # filesystem cleanup is best-effort
+
+    return {"name": name, "status": "deleted"}
 
 
 # ─────────────────────────────────────────────────────────────────────────────

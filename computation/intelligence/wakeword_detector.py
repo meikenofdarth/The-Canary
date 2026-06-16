@@ -327,8 +327,27 @@ def detect_wakeword(text: str) -> dict:
 
 
 def get_active_wakeword() -> str:
-    """Returns the currently active wakeword (e.g. 'canary' or custom word)."""
-    return _ACTIVE_WORD
+    """
+    Returns the currently active wakeword.
+
+    Always reads the config files fresh so changes made by /api/change-wakeword
+    are reflected immediately without restarting the server.
+
+    Priority:
+      1. computation/wakeword/wakeword_config.json  — if it exists AND has a word
+      2. default_wakeword_config.json in project root
+      3. "canary" hardcoded fallback
+    """
+    for path in (_CONFIG_PATH, _DEFAULT_PATH):
+        if path.exists():
+            try:
+                cfg = json.loads(path.read_text(encoding="utf-8"))
+                word = cfg.get("word", "").strip().lower()
+                if word:
+                    return word
+            except Exception:
+                continue
+    return "canary"
 
 
 def is_canary_default() -> bool:

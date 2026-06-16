@@ -11,23 +11,23 @@ interface TimelineItem {
 const timelineData: TimelineItem[] = [
   {
     id: 1,
-    title: 'Connect Your Voice Assistant',
-    description: 'Integrate The Canary with your systems and start managing voice interactions in one unified platform.',
+    title: 'Capture & Denoise',
+    description: 'Voice activity detection records until silence. Spectral filtering strips background noise before any analysis begins.',
   },
   {
     id: 2,
-    title: 'Real-time Performance Tracking',
-    description: 'Monitor command accuracy, response times, and user satisfaction with comprehensive analytics.',
+    title: 'Separate & Transcribe',
+    description: 'Neural source separation splits overlapping voices into clean individual streams. Each stream is transcribed independently.',
   },
   {
     id: 3,
-    title: 'Intelligent Command Management',
-    description: 'Prioritize commands, manage conversation flows, and optimize voice interactions effortlessly.',
+    title: 'Identify & Detect Wake Word',
+    description: 'Speaker biometrics match each voice to an enrolled profile. A phonetic matcher catches natural variations of the wake word.',
   },
   {
     id: 4,
-    title: 'Actionable Voice Insights',
-    description: 'Get detailed analytics to improve voice assistant performance and user experience.',
+    title: 'Arbitrate & Execute',
+    description: 'A priority engine weighs multiple signals to pick a winner — then fires the action against live services.',
   },
 ];
 

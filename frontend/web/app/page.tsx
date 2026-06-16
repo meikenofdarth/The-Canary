@@ -24,8 +24,9 @@ export default function Home() {
           </h1>
 
           <p className="mt-6 text-xl leading-relaxed text-muted-foreground">
-            Master your voice assistant platform with intelligent management, real-time analytics, and 
-            seamless command prioritization. Empower your team to build better voice experiences.
+            Multi-speaker voice intelligence for noisy, real-world rooms. The Canary
+            separates overlapping voices, identifies who&apos;s speaking, understands
+            their intent, and arbitrates conflicting commands — all in real time.
           </p>
 
           <button
@@ -48,40 +49,43 @@ export default function Home() {
       <section className="relative border-t border-border bg-secondary/20 px-4 py-20 sm:px-6 lg:px-8">
         <div className="mx-auto max-w-5xl">
           <h2 className="text-center text-3xl font-bold text-foreground">
-            Built for Modern Times
+            What The Canary Does
           </h2>
           <p className="mt-4 text-center text-lg text-muted-foreground">
-            Everything you need to manage voice assistants at scale
+            A complete voice intelligence pipeline, from microphone to action
           </p>
 
           <div className="mt-12 grid gap-8 md:grid-cols-3">
             <div className="rounded-lg border border-border bg-card p-6">
               <div className="h-12 w-12 rounded-lg bg-primary/20 flex items-center justify-center mb-4">
-                <span className="text-xl">📊</span>
+                <span className="text-base font-bold text-primary">01</span>
               </div>
-              <h3 className="text-lg font-semibold text-foreground">Real-Time Analytics</h3>
+              <h3 className="text-lg font-semibold text-foreground">Source Separation</h3>
               <p className="mt-2 text-sm text-muted-foreground">
-                Monitor performance metrics, command accuracy, and user engagement with live dashboards.
+                Neural source separation untangles overlapping voices into clean,
+                individually transcribable streams — even in crowded, noisy rooms.
               </p>
             </div>
 
             <div className="rounded-lg border border-border bg-card p-6">
               <div className="h-12 w-12 rounded-lg bg-primary/20 flex items-center justify-center mb-4">
-                <span className="text-xl">🎙️</span>
+                <span className="text-base font-bold text-primary">02</span>
               </div>
-              <h3 className="text-lg font-semibold text-foreground">Voice Recording</h3>
+              <h3 className="text-lg font-semibold text-foreground">Voice Identity</h3>
               <p className="mt-2 text-sm text-muted-foreground">
-                Capture voice profiles with precision. Record, analyze, and optimize voice interactions.
+                Speaker biometrics match each voice to an enrolled profile across
+                multiple independent acoustic feature dimensions.
               </p>
             </div>
 
             <div className="rounded-lg border border-border bg-card p-6">
               <div className="h-12 w-12 rounded-lg bg-primary/20 flex items-center justify-center mb-4">
-                <span className="text-xl">⚡</span>
+                <span className="text-base font-bold text-primary">03</span>
               </div>
-              <h3 className="text-lg font-semibold text-foreground">Smart Prioritization</h3>
+              <h3 className="text-lg font-semibold text-foreground">Arbitration</h3>
               <p className="mt-2 text-sm text-muted-foreground">
-                Manage command priorities intelligently. Organize workflows and maximize assistant efficiency.
+                When multiple speakers issue commands, a priority engine resolves
+                conflicts and routes the right action to the right person.
               </p>
             </div>
           </div>
@@ -95,7 +99,7 @@ export default function Home() {
             How It Works
           </h2>
           <p className="mt-4 text-center text-lg text-muted-foreground">
-            Four simple steps to master your voice assistant platform
+            Four stages from raw audio to executed command
           </p>
 
           <div className="mt-12">

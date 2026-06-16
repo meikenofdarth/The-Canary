@@ -2,7 +2,9 @@
 
 import { useState, useRef, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { Mic, MicOff, Play, Trash2, ArrowLeft, CheckCircle2, X } from 'lucide-react';
+import { Mic, MicOff, Play, Pause, Square, Trash2, ArrowLeft, CheckCircle2, X } from 'lucide-react';
+import { enrollBackendSpeaker } from '@/lib/api';
+import { addSpeaker, refreshSpeakers, deleteSpeaker, getSpeakers, getNormalSpeakers } from '@/lib/speakers-store';
 
 interface RemovalModalProps {
   isOpen: boolean;
@@ -204,17 +206,93 @@ export default function AddSpeakerPage() {
     }
   };
 
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [playingBlob, setPlayingBlob] = useState<Blob | null>(null);
+  const [isPaused, setIsPaused] = useState(false);
+
   const playRecording = (blob: Blob) => {
+    // Stop current playback if any
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.src = '';
+      audioRef.current = null;
+    }
+    if (playingBlob === blob && !isPaused) {
+      // Same blob — was playing, now stopped
+      setPlayingBlob(null);
+      setIsPaused(false);
+      return;
+    }
     const url = URL.createObjectURL(blob);
     const audio = new Audio(url);
+    audioRef.current = audio;
+    setPlayingBlob(blob);
+    setIsPaused(false);
     audio.play();
+    audio.onended = () => {
+      URL.revokeObjectURL(url);
+      setPlayingBlob(null);
+      setIsPaused(false);
+      audioRef.current = null;
+    };
   };
+
+  const pauseRecording = () => {
+    if (audioRef.current && !audioRef.current.paused) {
+      audioRef.current.pause();
+      setIsPaused(true);
+    } else if (audioRef.current && audioRef.current.paused) {
+      audioRef.current.play();
+      setIsPaused(false);
+    }
+  };
+
+  const stopRecordingPlayback = () => {
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.src = '';
+      audioRef.current = null;
+    }
+    setPlayingBlob(null);
+    setIsPaused(false);
+  };
+
+  const PlaybackControls = ({ blob }: { blob: Blob }) => {
+    const isThisPlaying = playingBlob === blob && !isPaused;
+    const isThisPaused = playingBlob === blob && isPaused;
+    return (
+      <div className="flex gap-1">
+        <button
+          type="button"
+          onClick={() => isThisPlaying ? pauseRecording() : (isThisPaused ? pauseRecording() : playRecording(blob))}
+          className="inline-flex items-center justify-center rounded-lg border border-border p-2 text-foreground hover:bg-secondary transition-colors"
+          aria-label={isThisPlaying ? 'Pause' : 'Play'}
+        >
+          {isThisPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+        </button>
+        {(isThisPlaying || isThisPaused) && (
+          <button
+            type="button"
+            onClick={stopRecordingPlayback}
+            className="inline-flex items-center justify-center rounded-lg border border-border p-2 text-foreground hover:bg-secondary transition-colors"
+            aria-label="Stop"
+          >
+            <Square className="h-4 w-4" />
+          </button>
+        )}
+      </div>
+    );
+  };
+
+  const [submitError, setSubmitError] = useState<string>('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+    setSubmitError('');
+
     if (!formData.name || !formData.city || !formData.country || !formData.musicGenre) {
-      alert('Please fill all required fields');
+      setSubmitError('Please fill all required fields');
       return;
     }
 
@@ -222,40 +300,34 @@ export default function AddSpeakerPage() {
     if (!formData.needsAccessibility) {
       const hasAllRecordings = VOICE_SCRIPTS.every(script => standardRecordings[script.id]);
       if (!hasAllRecordings) {
-        alert('Please record all 3 scripts before submitting');
+        setSubmitError('Please record all 3 scripts before submitting');
         return;
       }
-      
-      // For healthy speakers: after script 3 is recorded, show "Add Voice" confirmation
-      // and check if 5 speakers already exist
-      const { getSpeakers } = await import('@/lib/speakers-store');
+
+      // Capacity check: max 5 healthy speakers
       const existingSpeakers = getSpeakers();
       setAllSpeakers(existingSpeakers);
       const healthySpeakers = existingSpeakers.filter(s => !s.isAccessible);
-      
+
       if (healthySpeakers.length >= 5) {
-        // Show modal to remove a speaker
         setShowRemovalModal(true);
         return;
       }
-      
-      // Show "Add Voice" confirmation
+
       setShowAddVoiceConfirm(true);
       return;
     }
 
     if (formData.needsAccessibility && accessibilityRecordings.length !== ACCESSIBILITY_QUESTIONS.length) {
-      alert('Please complete all accessibility recordings');
+      setSubmitError('Please complete all accessibility recordings');
       return;
     }
 
-    // For accessibility speakers: check if one already exists
-    const { getSpeakers: getSpeakersFunc } = await import('@/lib/speakers-store');
-    const existingSpeakers = getSpeakersFunc();
-    setAllSpeakers(existingSpeakers);
-    const accessibilitySpeakers = existingSpeakers.filter((s: any) => s.isAccessible);
-    
     // Only 1 accessibility speaker allowed
+    const existingSpeakers = getSpeakers();
+    setAllSpeakers(existingSpeakers);
+    const accessibilitySpeakers = existingSpeakers.filter(s => s.isAccessible);
+
     if (accessibilitySpeakers.length > 0) {
       setSpeakerToRemove(accessibilitySpeakers[0].id);
       setShowRemovalModal(true);
@@ -266,41 +338,65 @@ export default function AddSpeakerPage() {
   };
 
   const completeAddSpeaker = async (speakerIdToRemove?: string) => {
-    const { addSpeaker, deleteSpeaker, getSpeakers, setSpeakers, getNormalSpeakers } = await import('@/lib/speakers-store');
-    
-    // Remove the selected speaker if user chose one in the modal
-    if (speakerIdToRemove) {
-      deleteSpeaker(speakerIdToRemove);
-    }
-    
-    // Get next available priority for new speaker
-    const existingSpeakers = getSpeakers();
-    const normalSpeakers = getNormalSpeakers();
-    
-    let nextPriority = 1;
-    if (normalSpeakers.length > 0) {
-      // If speaker list is full (5), priorities would have shifted
-      nextPriority = Math.min(normalSpeakers.length, 5);
-    }
+    setIsSubmitting(true);
+    setSubmitError('');
 
-    const speakerData = {
-      name: formData.name,
-      city: formData.city,
-      country: formData.country,
-      musicGenre: formData.musicGenre,
-      priority: formData.needsAccessibility ? 0 : nextPriority,
-      isAccessible: formData.needsAccessibility,
-      icon: ['🦁', '🦉', '🦊', '🦅', '🐺', '🐻', '🐼', '🦝', '🐸', '🦆'][Math.floor(Math.random() * 10)],
-      id: Date.now().toString(),
-    };
+    try {
+      // 1. Delete the chosen-to-replace speaker first (calls DELETE /api/users/{name})
+      if (speakerIdToRemove) {
+        await deleteSpeaker(speakerIdToRemove);
+      }
 
-    addSpeaker(speakerData as any);
-    
-    setShowRemovalModal(false);
-    setShowAddVoiceConfirm(false);
-    startTransition(() => {
-      router.push('/dashboard');
-    });
+      // 2. Collect the 3 audio blobs (standard or accessibility)
+      const blobs: Blob[] = formData.needsAccessibility
+        ? accessibilityRecordings.slice(0, 3)
+        : VOICE_SCRIPTS.map(s => standardRecordings[s.id]);
+
+      if (blobs.length < 3 || blobs.some(b => !b)) {
+        throw new Error('Three voice recordings are required.');
+      }
+
+      // 3. Hit the real backend
+      await enrollBackendSpeaker({
+        name: formData.name,
+        city: formData.city,
+        newsCountry: formData.country,
+        favoriteGenre: formData.musicGenre,
+        audioBlobs: blobs,
+      });
+
+      // 4. Persist UI-only fields (priority + animal icon + accessibility flag)
+      const ANIMAL_EMOJIS = ['🦁', '🦉', '🦊', '🦅', '🐺', '🐻', '🐼', '🦝', '🦌', '🦆'];
+      const normalSpeakers = getNormalSpeakers();
+      const nextPriority = formData.needsAccessibility
+        ? 0
+        : Math.max(1, Math.min(5, normalSpeakers.length + 1));
+
+      addSpeaker({
+        id: '0', // backend will assign real id; refresh will replace
+        name: formData.name,
+        city: formData.city,
+        country: formData.country,
+        musicGenre: formData.musicGenre,
+        priority: nextPriority,
+        isAccessible: formData.needsAccessibility,
+        icon: ANIMAL_EMOJIS[Math.floor(Math.random() * ANIMAL_EMOJIS.length)],
+      });
+
+      // 5. Refresh from backend so the dashboard list updates
+      await refreshSpeakers();
+
+      setShowRemovalModal(false);
+      setShowAddVoiceConfirm(false);
+      startTransition(() => {
+        router.push('/dashboard');
+      });
+    } catch (err: unknown) {
+      setSubmitError(err instanceof Error ? err.message : 'Enrollment failed.');
+      setShowAddVoiceConfirm(false);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleAccessibilityChange = (checked: boolean) => {
@@ -494,14 +590,7 @@ export default function AddSpeakerPage() {
                       <p className="font-semibold text-green-700">Recording Complete</p>
                     </div>
                     <div className="flex gap-2">
-                      <button
-                        type="button"
-                        onClick={() => playRecording(standardRecordings[selectedScript])}
-                        className="flex-1 inline-flex items-center justify-center gap-2 rounded-lg border border-green-300 px-4 py-2 font-semibold text-green-700 hover:bg-green-100"
-                      >
-                        <Play className="h-4 w-4" />
-                        Play Recording
-                      </button>
+                      <PlaybackControls blob={standardRecordings[selectedScript]} />
                       <button
                         type="button"
                         onClick={() => setStandardRecordings(prev => {
@@ -580,14 +669,7 @@ export default function AddSpeakerPage() {
 
                     {accessibilityRecordings[currentAccessibilityQuestion] && (
                       <div className="flex gap-2">
-                        <button
-                          type="button"
-                          onClick={() => playRecording(accessibilityRecordings[currentAccessibilityQuestion])}
-                          className="flex-1 inline-flex items-center justify-center gap-2 rounded-lg border border-border px-4 py-2 font-semibold text-foreground hover:bg-secondary"
-                        >
-                          <Play className="h-4 w-4" />
-                          Play Recording
-                        </button>
+                        <PlaybackControls blob={accessibilityRecordings[currentAccessibilityQuestion]} />
                         <button
                           type="button"
                           onClick={() => {
@@ -641,12 +723,17 @@ export default function AddSpeakerPage() {
         {/* Submit Section - Below both columns */}
         <form onSubmit={handleFormSubmit} className="mt-8">
           <div className="rounded-lg border border-border bg-card p-6">
+            {submitError && (
+              <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+                {submitError}
+              </div>
+            )}
             {/* Submit Buttons */}
             <div className="flex gap-2 pt-6 border-t border-border mt-6">
               <button
                 type="button"
                 onClick={() => startTransition(() => router.back())}
-                disabled={isPending}
+                disabled={isPending || isSubmitting}
                 className="flex-1 rounded-lg border border-border px-6 py-3 font-semibold text-foreground hover:bg-secondary disabled:opacity-60"
               >
                 Cancel
@@ -654,9 +741,9 @@ export default function AddSpeakerPage() {
               <button
                 type="submit"
                 className="flex-1 rounded-lg bg-primary px-6 py-3 font-semibold text-primary-foreground hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
-                disabled={isRecording || (!formData.needsAccessibility && !Object.keys(standardRecordings).length) || (formData.needsAccessibility && accessibilityRecordings.length !== ACCESSIBILITY_QUESTIONS.length)}
+                disabled={isSubmitting || isRecording || (!formData.needsAccessibility && Object.keys(standardRecordings).length < 3) || (formData.needsAccessibility && accessibilityRecordings.length !== ACCESSIBILITY_QUESTIONS.length)}
               >
-                Confirm Add Voice
+                {isSubmitting ? 'Enrolling…' : 'Confirm Add Voice'}
               </button>
             </div>
           </div>
@@ -680,15 +767,17 @@ export default function AddSpeakerPage() {
               <div className="flex gap-2">
                 <button
                   onClick={() => setShowAddVoiceConfirm(false)}
-                  className="flex-1 rounded-lg border border-border px-4 py-2 font-semibold text-foreground hover:bg-secondary"
+                  disabled={isSubmitting}
+                  className="flex-1 rounded-lg border border-border px-4 py-2 font-semibold text-foreground hover:bg-secondary disabled:opacity-60"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={() => completeAddSpeaker()}
-                  className="flex-1 rounded-lg bg-primary px-4 py-2 font-semibold text-primary-foreground hover:shadow-lg"
+                  disabled={isSubmitting}
+                  className="flex-1 rounded-lg bg-primary px-4 py-2 font-semibold text-primary-foreground hover:shadow-lg disabled:opacity-60"
                 >
-                  Confirm Add Voice
+                  {isSubmitting ? 'Enrolling…' : 'Confirm Add Voice'}
                 </button>
               </div>
             </div>

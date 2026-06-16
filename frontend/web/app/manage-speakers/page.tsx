@@ -3,7 +3,13 @@
 import { useState, useTransition, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, Trash2, Plus, GripVertical } from 'lucide-react';
-import { getSpeakers, setSpeakers, changePriority as changePriorityInStore } from '@/lib/speakers-store';
+import {
+  getSpeakers,
+  refreshSpeakers,
+  setSpeakers,
+  changePriority as changePriorityInStore,
+  deleteSpeaker as deleteSpeakerInStore,
+} from '@/lib/speakers-store';
 import type { Speaker } from '@/lib/speakers-store';
 import {
   DndContext,
@@ -106,18 +112,27 @@ export default function ManageSpeakersPage() {
 
   // Load speakers on mount and sync updates
   useEffect(() => {
-    const loaded = getSpeakers();
-    setSpeakersState(loaded);
-    setLoading(false);
+    let alive = true;
+    const cached = getSpeakers();
+    if (cached.length) setSpeakersState(cached);
 
-    // Listen for storage changes
+    refreshSpeakers()
+      .then((fresh) => {
+        if (alive) setSpeakersState(fresh);
+      })
+      .catch((e) => console.error('refresh failed', e))
+      .finally(() => {
+        if (alive) setLoading(false);
+      });
+
     const handleStorageChange = () => {
-      const updated = getSpeakers();
-      setSpeakersState(updated);
+      if (alive) setSpeakersState(getSpeakers());
     };
-
     window.addEventListener('storage', handleStorageChange);
-    return () => window.removeEventListener('storage', handleStorageChange);
+    return () => {
+      alive = false;
+      window.removeEventListener('storage', handleStorageChange);
+    };
   }, []);
 
   // Get normal speakers (non-accessibility) sorted by priority
@@ -151,10 +166,14 @@ export default function ManageSpeakersPage() {
     setSpeakersState(updated);
   };
 
-  const handleDelete = (id: string) => {
-    const updated = speakers.filter(s => s.id !== id);
-    setSpeakers(updated);
-    setSpeakersState(updated);
+  const handleDelete = async (id: string) => {
+    try {
+      await deleteSpeakerInStore(id);
+      setSpeakersState(getSpeakers());
+    } catch (err) {
+      console.error('Delete failed:', err);
+      alert(err instanceof Error ? err.message : 'Failed to delete speaker.');
+    }
   };
 
   if (loading) {

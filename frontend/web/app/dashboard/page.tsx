@@ -6,18 +6,21 @@ import { DashboardNavbar } from '@/components/dashboard-navbar';
 import { UsageChart } from '@/components/usage-chart';
 import { SpeakersList } from '@/components/speakers-list';
 import { Plus, Settings, List } from 'lucide-react';
+import { fetchSystemStatus } from '@/lib/api';
+import { refreshSpeakers } from '@/lib/speakers-store';
 
 export default function Dashboard() {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [status, setStatus] = useState<{
+    activeWakeword: string;
+    enrolledUsers: number;
+    online: boolean;
+  }>({ activeWakeword: '—', enrolledUsers: 0, online: false });
 
   useEffect(() => {
-    // TODO: API Integration - Fetch user session
-    // GET /api/auth/session
-    // Response: { userId, email, authenticated: boolean }
-    
     // Check if user is logged in
     const loggedIn = sessionStorage.getItem('isLoggedIn');
     if (!loggedIn) {
@@ -27,6 +30,34 @@ export default function Dashboard() {
     }
     setIsLoading(false);
   }, [router]);
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
+    let alive = true;
+    const load = async () => {
+      try {
+        const [s] = await Promise.all([fetchSystemStatus(), refreshSpeakers()]);
+        if (alive) {
+          setStatus({
+            activeWakeword: s.active_wakeword,
+            enrolledUsers: s.enrolled_users,
+            online: s.status === 'ok',
+          });
+        }
+      } catch (e) {
+        console.error('Status fetch failed', e);
+        if (alive) setStatus((p) => ({ ...p, online: false }));
+      }
+    };
+
+    load();
+    const interval = setInterval(load, 15000);
+    return () => {
+      alive = false;
+      clearInterval(interval);
+    };
+  }, [isAuthenticated]);
 
   if (isLoading) {
     return (
@@ -95,26 +126,29 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Additional Stats Section */}
-        {/* TODO: API Integration - Fetch dashboard metrics */}
-        {/* GET /api/dashboard/metrics */}
-        {/* Response: { commandsProcessed, activeSessions, avgResponseTime, accuracyRate } */}
+        {/* Live status cards driven by GET /api/status + speakers store */}
         <div className="mt-8 grid gap-4 sm:grid-cols-2 md:grid-cols-4">
           <div className="rounded-lg border border-border bg-card p-6 shadow-sm hover:shadow-md transition-shadow">
-            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Voice Commands Processed</p>
-            <p className="mt-3 text-3xl font-bold text-foreground">145,892</p>
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Enrolled Speakers</p>
+            <p className="mt-3 text-3xl font-bold text-foreground">{status.enrolledUsers} / 5</p>
+          </div>
+          <button
+            onClick={() => startTransition(() => router.push('/customize-wakeword'))}
+            className="rounded-lg border border-border bg-card p-6 shadow-sm hover:shadow-md hover:border-primary/40 transition-all text-left group"
+          >
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Active Wake Word</p>
+            <p className="mt-3 text-3xl font-bold text-foreground">&quot;{status.activeWakeword}&quot;</p>
+            <p className="mt-2 text-xs text-primary opacity-0 group-hover:opacity-100 transition-opacity">Click to change →</p>
+          </button>
+          <div className="rounded-lg border border-border bg-card p-6 shadow-sm hover:shadow-md transition-shadow">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Pipeline Status</p>
+            <p className={`mt-3 text-3xl font-bold ${status.online ? 'text-green-600' : 'text-red-500'}`}>
+              {status.online ? 'Online' : 'Offline'}
+            </p>
           </div>
           <div className="rounded-lg border border-border bg-card p-6 shadow-sm hover:shadow-md transition-shadow">
-            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Active Voice Sessions</p>
-            <p className="mt-3 text-3xl font-bold text-foreground">2,384</p>
-          </div>
-          <div className="rounded-lg border border-border bg-card p-6 shadow-sm hover:shadow-md transition-shadow">
-            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Avg. Response Time</p>
-            <p className="mt-3 text-3xl font-bold text-foreground">320ms</p>
-          </div>
-          <div className="rounded-lg border border-border bg-card p-6 shadow-sm hover:shadow-md transition-shadow">
-            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Accuracy Rate</p>
-            <p className="mt-3 text-3xl font-bold text-foreground">94.2%</p>
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Capacity</p>
+            <p className="mt-3 text-3xl font-bold text-foreground">{Math.max(0, 5 - status.enrolledUsers)} free</p>
           </div>
         </div>
       </main>

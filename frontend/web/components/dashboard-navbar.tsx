@@ -19,12 +19,12 @@ export function DashboardNavbar() {
   return (
     <nav className="sticky top-0 z-40 border-b border-border bg-card/80 backdrop-blur">
       <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
-        {/* Home Icon - clicks to go to dashboard */}
+        {/* Home Icon - clicks to go to landing page */}
         <button
-          onClick={() => startTransition(() => router.push('/dashboard'))}
+          onClick={() => startTransition(() => router.push('/'))}
           disabled={isPending}
           className="flex items-center gap-2 text-primary transition-all hover:text-primary/80 hover:scale-110 disabled:opacity-60"
-          title="Go to dashboard"
+          title="Go to home"
         >
           <Home className="h-6 w-6" />
         </button>

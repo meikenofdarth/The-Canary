@@ -1,0 +1,8 @@
+[Language: en]
+[Status: ✓  READY — meaningful speech detected]
+[RMS: -18.6 dBFS | Speech ratio: 43%]
+
+amy, what's the weather in my city?
+
+--- Segments ---
+[0.00s → 4.00s] Amy, what's the weather in my city?
