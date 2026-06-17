@@ -1,9 +1,0 @@
-[Language: en]
-[Status: ✓  READY — meaningful speech detected]
-[RMS: -19.3 dBFS | Speech ratio: 65%]
-
-Canary I have a blue towel and a brown towel. I also have a television.
-
---- Segments ---
-[0.00s → 5.00s] Canary I have a blue towel and a brown towel.
-[5.00s → 7.00s] I also have a television.

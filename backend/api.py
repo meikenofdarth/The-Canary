@@ -46,6 +46,7 @@ from backend.mcp_server import execute_intent
 from backend.queue import load_user_profiles
 from database.canary_db import (
     get_preferences, get_all_users, get_user_count, upsert_user, get_db_path, init_db,
+    update_priority,
 )
 
 # Audio processing helpers from run_canary.py
@@ -808,6 +809,33 @@ async def delete_user_endpoint(name: str):
         pass  # filesystem cleanup is best-effort
 
     return {"name": name, "status": "deleted"}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  PATCH /api/users/{name}/priority
+# ─────────────────────────────────────────────────────────────────────────────
+
+from pydantic import BaseModel
+
+class PriorityPayload(BaseModel):
+    priority: int
+
+@app.patch("/api/users/{name}/priority")
+async def update_priority_endpoint(name: str, payload: PriorityPayload):
+    """Update the priority (1–5) of an enrolled speaker."""
+    if not name or not name.strip():
+        raise HTTPException(status_code=400, detail="Name is required.")
+
+    name = name.strip()
+
+    if not (1 <= payload.priority <= 5):
+        raise HTTPException(status_code=400, detail="Priority must be between 1 and 5.")
+
+    ok = update_priority(name, payload.priority)
+    if not ok:
+        raise HTTPException(status_code=404, detail=f"User '{name}' not found.")
+
+    return {"name": name, "priority": payload.priority, "status": "updated"}
 
 
 # ─────────────────────────────────────────────────────────────────────────────

@@ -44,6 +44,7 @@ CREATE TABLE IF NOT EXISTS users (
     name              TEXT UNIQUE NOT NULL,
     created_at        DATETIME DEFAULT CURRENT_TIMESTAMP,
     recording_count   INTEGER DEFAULT 0,
+    priority          INTEGER DEFAULT 3,
 
     -- Voice biometric scalars (from profile.json)
     pitch_mean        REAL,
@@ -92,12 +93,17 @@ def get_connection() -> sqlite3.Connection:
 
 
 def init_db() -> None:
-    """Create tables if they don't exist."""
+    """Create tables if they don't exist, and migrate existing tables."""
     conn = get_connection()
     try:
         conn.execute(_CREATE_USERS)
         conn.execute(_CREATE_RECORDINGS)
         conn.commit()
+        # Migration: add priority column if it doesn't exist (for existing DBs)
+        cols = [row[1] for row in conn.execute("PRAGMA table_info(users)").fetchall()]
+        if "priority" not in cols:
+            conn.execute("ALTER TABLE users ADD COLUMN priority INTEGER DEFAULT 3")
+            conn.commit()
     finally:
         conn.close()
 
@@ -337,6 +343,25 @@ def delete_user(name: str) -> bool:
     try:
         conn.execute("DELETE FROM recordings WHERE speaker_id = ?", (speaker_id,))
         conn.execute("DELETE FROM users WHERE speaker_id = ?", (speaker_id,))
+        conn.commit()
+        return True
+    finally:
+        conn.close()
+
+
+def update_priority(name: str, priority: int) -> bool:
+    """Set the priority (1-5) for a user. Returns True if user was found and updated."""
+    init_db()
+    user = get_user(name)
+    if user is None:
+        return False
+    priority = max(1, min(5, priority))
+    conn = get_connection()
+    try:
+        conn.execute(
+            "UPDATE users SET priority = ? WHERE speaker_id = ?",
+            (priority, user["speaker_id"]),
+        )
         conn.commit()
         return True
     finally:

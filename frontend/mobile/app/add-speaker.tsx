@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Switch, KeyboardAvoidingView, Platform, Alert, Modal } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Audio } from 'expo-av';
+import { useAudioRecorder, useAudioPlayer, AudioModule, RecordingPresets } from 'expo-audio';
 import { ArrowLeft, Mic, MicOff, Play, Pause, Square, CheckCircle2, X } from 'lucide-react-native';
 import { COLORS, SPACING, RADIUS } from '../constants/theme';
 import { enrollBackendSpeaker } from '../lib/api';
@@ -53,17 +53,15 @@ export default function AddSpeakerPage() {
 
   const [selectedScript, setSelectedScript] = useState<number | null>(null);
   const [isRecording, setIsRecording] = useState(false);
-  const [recording, setRecording] = useState<Audio.Recording | null>(null);
   const [recordingTime, setRecordingTime] = useState(0);
   
   const [standardRecordings, setStandardRecordings] = useState<{ [key: number]: string }>({});
   const [accessibilityRecordings, setAccessibilityRecordings] = useState<string[]>([]);
   const [currentAccessibilityQuestion, setCurrentAccessibilityQuestion] = useState(0);
   
-  const [sound, setSound] = useState<Audio.Sound | null>(null);
+  const audioRecorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
   const [playingUri, setPlayingUri] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
-
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState('');
   
@@ -72,50 +70,31 @@ export default function AddSpeakerPage() {
   const [selectedSpeakerToRemove, setSelectedSpeakerToRemove] = useState<string | null>(null);
 
   const timerRef = useRef<NodeJS.Timeout | null>(null);
-
-  useEffect(() => {
-    return sound ? () => { sound.unloadAsync(); } : undefined;
-  }, [sound]);
-
   const script = selectedScript ? VOICE_SCRIPTS[selectedScript - 1] : null;
   const processedScript = script ? script.text.replace('[your name]', formData.name || 'your name') : '';
 
   const startRecording = async (type: 'standard' | 'accessibility') => {
     try {
-      const permission = await Audio.requestPermissionsAsync();
-      if (permission.status !== 'granted') {
+      const status = await AudioModule.requestRecordingPermissionsAsync();
+      if (!status.granted) {
         Alert.alert('Permission Denied', 'Microphone access is required to record voice samples.');
         return;
       }
-      
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: true,
-        playsInSilentModeIOS: true,
-      });
-
-      const { recording } = await Audio.Recording.createAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY);
-      setRecording(recording);
+      await audioRecorder.prepareToRecordAsync();
+      audioRecorder.record();
       setIsRecording(true);
       setRecordingTime(0);
-
-      timerRef.current = setInterval(() => {
-        setRecordingTime((prev) => prev + 1);
-      }, 1000);
+      timerRef.current = setInterval(() => setRecordingTime(p => p + 1), 1000);
     } catch (err) {
       console.error('Failed to start recording', err);
     }
   };
 
   const stopRecording = async (type: 'standard' | 'accessibility') => {
-    if (!recording) return;
-
     if (timerRef.current) clearInterval(timerRef.current);
-    
-    await recording.stopAndUnloadAsync();
-    const uri = recording.getURI();
-    setRecording(null);
+    await audioRecorder.stop();
+    const uri = audioRecorder.uri;
     setIsRecording(false);
-
     if (uri) {
       if (type === 'standard' && selectedScript) {
         setStandardRecordings(prev => ({ ...prev, [selectedScript]: uri }));
@@ -128,42 +107,12 @@ export default function AddSpeakerPage() {
   };
 
   const playRecording = async (uri: string) => {
-    if (sound) {
-      await sound.unloadAsync();
-    }
-    
-    await Audio.setAudioModeAsync({
-      allowsRecordingIOS: false,
-      playsInSilentModeIOS: true,
-    });
-
-    const { sound: newSound } = await Audio.Sound.createAsync({ uri }, { shouldPlay: true });
-    setSound(newSound);
     setPlayingUri(uri);
     setIsPlaying(true);
-
-    newSound.setOnPlaybackStatusUpdate((status) => {
-      if (status.isLoaded && status.didJustFinish) {
-        setIsPlaying(false);
-        setPlayingUri(null);
-      }
-    });
   };
 
-  const pausePlayback = async () => {
-    if (sound) {
-      await sound.pauseAsync();
-      setIsPlaying(false);
-    }
-  };
-
-  const stopPlayback = async () => {
-    if (sound) {
-      await sound.stopAsync();
-      setIsPlaying(false);
-      setPlayingUri(null);
-    }
-  };
+  const pausePlayback = async () => { setIsPlaying(false); };
+  const stopPlayback = async () => { setIsPlaying(false); setPlayingUri(null); };
 
   const deleteRecording = (type: 'standard' | 'accessibility', id: number) => {
     if (type === 'standard') {
@@ -316,7 +265,7 @@ export default function AddSpeakerPage() {
               <TextInput
                 style={styles.input}
                 placeholder="Enter speaker name"
-                placeholderTextColor={COLORS.mutedForeground}
+                placeholderTextColor="#4b5563"
                 value={formData.name}
                 onChangeText={(t) => setFormData({...formData, name: t})}
               />
@@ -327,7 +276,7 @@ export default function AddSpeakerPage() {
               <TextInput
                 style={styles.input}
                 placeholder="Enter your city"
-                placeholderTextColor={COLORS.mutedForeground}
+                placeholderTextColor="#4b5563"
                 value={formData.city}
                 onChangeText={(t) => setFormData({...formData, city: t})}
               />
@@ -338,7 +287,7 @@ export default function AddSpeakerPage() {
               <TextInput
                 style={styles.input}
                 placeholder="Enter your country"
-                placeholderTextColor={COLORS.mutedForeground}
+                placeholderTextColor="#4b5563"
                 value={formData.country}
                 onChangeText={(t) => setFormData({...formData, country: t})}
               />
@@ -350,7 +299,7 @@ export default function AddSpeakerPage() {
               <TextInput
                 style={styles.input}
                 placeholder="Pop, Rock, Jazz..."
-                placeholderTextColor={COLORS.mutedForeground}
+                placeholderTextColor="#4b5563"
                 value={formData.musicGenre}
                 onChangeText={(t) => setFormData({...formData, musicGenre: t})}
               />

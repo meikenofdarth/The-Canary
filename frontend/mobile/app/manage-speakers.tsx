@@ -4,7 +4,7 @@ import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ArrowLeft, Trash2, ArrowUp, ArrowDown } from 'lucide-react-native';
 import { COLORS, SPACING, RADIUS } from '../constants/theme';
-import { Speaker, getSpeakers, deleteSpeaker, changePriority } from '../lib/speakers-store';
+import { Speaker, refreshSpeakers, deleteSpeaker, changePriority } from '../lib/speakers-store';
 
 export default function ManageSpeakersPage() {
   const router = useRouter();
@@ -13,7 +13,7 @@ export default function ManageSpeakersPage() {
 
   const loadSpeakers = async () => {
     setIsLoading(true);
-    const data = await getSpeakers();
+    const data = await refreshSpeakers();
     setSpeakers(data.sort((a, b) => b.priority - a.priority));
     setIsLoading(false);
   };

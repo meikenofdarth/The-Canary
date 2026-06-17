@@ -1,8 +1,0 @@
-[Language: en]
-[Status: ✓  READY — meaningful speech detected]
-[RMS: -19.3 dBFS | Speech ratio: 54%]
-
-Raju, what is the weather in Hedraabad today?
-
---- Segments ---
-[0.00s → 4.00s] Raju, what is the weather in Hedraabad today?

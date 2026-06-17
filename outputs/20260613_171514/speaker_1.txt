@@ -1,9 +1,0 @@
-[Language: en]
-[Status: ✓  READY — meaningful speech detected]
-[RMS: -21.2 dBFS | Speech ratio: 52%]
-
-So there is something brown and something black and I'm talking about something. He can read, turn on the lights.
-
---- Segments ---
-[0.00s → 5.00s] So there is something brown and something black and I'm talking about something.
-[5.00s → 7.00s] He can read, turn on the lights.

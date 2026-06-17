@@ -4,7 +4,7 @@
 // Backend owns: name, recording_count, city, news_country, favorite_genre, created_at, voice biometrics.
 // Frontend keeps (per name): icon (animal emoji), priority (1-5), isAccessible flag.
 
-import { fetchBackendUsers, deleteBackendUser, type BackendUser } from "./api";
+import { fetchBackendUsers, deleteBackendUser, updateUserPriority, type BackendUser } from "./api";
 
 export interface Speaker {
   // From backend
@@ -100,7 +100,8 @@ function toSpeaker(
     musicGenre: u.favorite_genre ?? undefined,
     recordingCount: u.recording_count,
     createdAt: u.created_at,
-    priority: o?.priority ?? fallbackPriority,
+    // Priority comes from the backend DB; fall back to local override only if missing
+    priority: u.priority ?? o?.priority ?? fallbackPriority,
     icon,
     isAccessible: o?.isAccessible ?? false,
     status: "scheduled",
@@ -182,18 +183,24 @@ export function addSpeaker(speaker: Speaker): void {
   // refreshSpeakers() is awaited by callers right after addSpeaker
 }
 
-/** Update one speaker's priority (drag-drop or dropdown). */
-export function changePriority(speakerId: string, newPriority: number): void {
+/** Update one speaker's priority — persists to backend DB and updates local cache. */
+export async function changePriority(speakerId: string, newPriority: number): Promise<void> {
   const speakers = getSpeakers();
   const s = speakers.find((x) => x.id === speakerId);
   if (!s || s.isAccessible) return;
+
+  // Persist to backend first
+  await updateUserPriority(s.name, newPriority);
+
+  // Update icon/isAccessible override in localStorage (priority no longer stored here)
   const overrides = loadOverrides();
   overrides[s.name] = {
-    priority: newPriority,
+    priority: newPriority, // keep for offline fallback
     icon: overrides[s.name]?.icon ?? s.icon,
     isAccessible: overrides[s.name]?.isAccessible ?? false,
   };
   saveOverrides(overrides);
+
   const updated = speakers.map((x) =>
     x.id === speakerId ? { ...x, priority: newPriority } : x,
   );

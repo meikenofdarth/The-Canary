@@ -1,8 +1,0 @@
-[Language: en]
-[Status: ✓  READY — meaningful speech detected]
-[RMS: -27.0 dBFS | Speech ratio: 45%]
-
-Hello, so can you please tell me the weather in Delhi today?
-
---- Segments ---
-[0.00s → 5.00s] Hello, so can you please tell me the weather in Delhi today?

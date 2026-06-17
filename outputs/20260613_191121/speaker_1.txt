@@ -1,8 +1,0 @@
-[Language: en]
-[Status: ✓  READY — meaningful speech detected]
-[RMS: -19.5 dBFS | Speech ratio: 46%]
-
-Hey Raju, tell me about the weather in Himaqal today.
-
---- Segments ---
-[0.00s → 5.00s] Hey Raju, tell me about the weather in Himaqal today.

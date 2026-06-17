@@ -140,7 +140,7 @@ export default function ManageSpeakersPage() {
   const accessibilitySpeaker = speakers.find(s => s.isAccessible);
 
   // Handle drag end
-  const handleDragEnd = (event: DragEndEvent) => {
+  const handleDragEnd = async (event: DragEndEvent) => {
     const { active, over } = event;
 
     if (over && active.id !== over.id) {
@@ -148,22 +148,38 @@ export default function ManageSpeakersPage() {
       const newIndex = normalSpeakers.findIndex(s => s.id === over.id);
       const newOrder = arrayMove(normalSpeakers, oldIndex, newIndex);
       
-      // Update priorities based on new order
+      // Assign priorities based on new order (top = highest)
       const updated = speakers.map(s => {
         if (s.isAccessible) return s;
         const orderIndex = newOrder.findIndex(ns => ns.id === s.id);
         return { ...s, priority: newOrder.length - orderIndex };
       });
-      
-      setSpeakers(updated);
+
+      // Optimistic UI update
       setSpeakersState(updated);
+      setSpeakers(updated);
+
+      // Persist each changed priority to backend
+      try {
+        await Promise.all(
+          updated
+            .filter(s => !s.isAccessible)
+            .map(s => changePriorityInStore(s.id, s.priority))
+        );
+      } catch (err) {
+        console.error('Drag priority update failed:', err);
+      }
     }
   };
 
-  const handlePriorityChange = (speakerId: string, newPriority: number) => {
-    changePriorityInStore(speakerId, newPriority);
-    const updated = getSpeakers();
-    setSpeakersState(updated);
+  const handlePriorityChange = async (speakerId: string, newPriority: number) => {
+    try {
+      await changePriorityInStore(speakerId, newPriority);
+      setSpeakersState(getSpeakers());
+    } catch (err) {
+      console.error('Priority update failed:', err);
+      alert('Failed to update priority.');
+    }
   };
 
   const handleDelete = async (id: string) => {

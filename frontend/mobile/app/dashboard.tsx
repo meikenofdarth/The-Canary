@@ -6,6 +6,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { COLORS, SPACING, RADIUS } from '../constants/theme';
 import { DashboardNavbar } from '../components/DashboardNavbar';
 import { SpeakersList } from '../components/SpeakersList';
+import { UsageChart } from '../components/UsageChart';
 import { fetchSystemStatus } from '../lib/api';
 import { refreshSpeakers } from '../lib/speakers-store';
 import { Settings, List, Plus } from 'lucide-react-native';
@@ -128,13 +129,7 @@ export default function DashboardPage() {
         </View>
 
         <View style={styles.mainGrid}>
-          <View style={styles.chartContainer}>
-            <Text style={styles.chartTitle}>Voice Commands vs Time</Text>
-            <Text style={styles.chartSubtitle}>Voice command volume throughout the day</Text>
-            <View style={styles.chartPlaceholder}>
-              <Text style={styles.placeholderText}>Chart visualization placeholder</Text>
-            </View>
-          </View>
+          <UsageChart />
           
           <View style={styles.listContainer}>
             <SpeakersList />
@@ -236,41 +231,6 @@ const styles = StyleSheet.create({
   mainGrid: {
     flexDirection: 'column',
     gap: SPACING.xl,
-  },
-  chartContainer: {
-    backgroundColor: COLORS.card,
-    borderRadius: RADIUS.xl,
-    padding: SPACING.lg,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 10,
-    elevation: 2,
-  },
-  chartTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: COLORS.foreground,
-  },
-  chartSubtitle: {
-    fontSize: 14,
-    color: COLORS.mutedForeground,
-    marginBottom: SPACING.lg,
-  },
-  chartPlaceholder: {
-    height: 200,
-    backgroundColor: COLORS.secondary,
-    borderRadius: RADIUS.md,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderStyle: 'dashed',
-    borderColor: COLORS.border,
-  },
-  placeholderText: {
-    color: COLORS.mutedForeground,
   },
   listContainer: {
     // Spans 1 column on web, here takes full width

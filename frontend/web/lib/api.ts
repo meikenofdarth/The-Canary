@@ -10,6 +10,7 @@ export const API = {
   status: `${API_BASE}/api/status`,
   users: `${API_BASE}/api/users`,
   user: (name: string) => `${API_BASE}/api/users/${encodeURIComponent(name)}`,
+  userPriority: (name: string) => `${API_BASE}/api/users/${encodeURIComponent(name)}/priority`,
   enroll: `${API_BASE}/api/enroll`,
   changeWakeword: `${API_BASE}/api/change-wakeword`,
   command: `${API_BASE}/api/command`,
@@ -21,6 +22,7 @@ export interface BackendUser {
   name: string;
   created_at: string;
   recording_count: number;
+  priority?: number | null;
   pitch_mean?: number | null;
   pitch_std?: number | null;
   energy_mean?: number | null;
@@ -42,6 +44,18 @@ export async function deleteBackendUser(name: string): Promise<void> {
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(err.detail || `Failed to delete: HTTP ${res.status}`);
+  }
+}
+
+export async function updateUserPriority(name: string, priority: number): Promise<void> {
+  const res = await fetch(API.userPriority(name), {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ priority }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || `Failed to update priority: HTTP ${res.status}`);
   }
 }
 

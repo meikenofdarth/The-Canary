@@ -1,8 +1,0 @@
-[Language: hi]
-[Status: ✓  READY — meaningful speech detected]
-[RMS: -23.9 dBFS | Speech ratio: 33%]
-
-Raju tell me the weather in Delhi today.
-
---- Segments ---
-[0.00s → 5.00s] Raju tell me the weather in Delhi today.

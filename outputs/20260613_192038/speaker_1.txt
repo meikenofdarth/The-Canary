@@ -1,8 +1,0 @@
-[Language: en]
-[Status: ✓  READY — meaningful speech detected]
-[RMS: -18.9 dBFS | Speech ratio: 44%]
-
-Hey Raju, tell me about the weather in Hedra Bhat today.
-
---- Segments ---
-[0.00s → 6.00s] Hey Raju, tell me about the weather in Hedra Bhat today.

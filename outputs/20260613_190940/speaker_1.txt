@@ -1,8 +1,0 @@
-[Language: ur]
-[Status: ✓  READY — meaningful speech detected]
-[RMS: -20.9 dBFS | Speech ratio: 47%]
-
-را جو ترمیدہ بدر ان حدرہ پاہد رائٹ نو۔
-
---- Segments ---
-[0.00s → 4.48s] را جو ترمیدہ بدر ان حدرہ پاہد رائٹ نو۔  [low confidence]

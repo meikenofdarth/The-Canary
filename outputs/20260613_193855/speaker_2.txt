@@ -1,8 +1,0 @@
-[Language: hi]
-[Status: ✓  READY — meaningful speech detected]
-[RMS: -23.3 dBFS | Speech ratio: 41%]
-
-Hey Raju, play at Phong Pomeel.
-
---- Segments ---
-[0.00s → 3.00s] Hey Raju, play at Phong Pomeel.  [low confidence]

@@ -1,8 +1,0 @@
-[Language: hi]
-[Status: ✓  READY — meaningful speech detected]
-[RMS: -24.5 dBFS | Speech ratio: 74%]
-
-what is the weather in haja vaat today?
-
---- Segments ---
-[0.00s → 4.00s] What is the weather in Haja Vaat today?  [low confidence]

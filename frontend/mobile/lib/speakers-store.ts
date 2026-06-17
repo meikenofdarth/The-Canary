@@ -1,5 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { fetchBackendUsers, deleteBackendUser, type BackendUser } from "./api";
+import { fetchBackendUsers, deleteBackendUser, updateUserPriority, type BackendUser } from "./api";
 
 export interface Speaker {
   // From backend
@@ -88,7 +88,8 @@ function toSpeaker(
     musicGenre: u.favorite_genre ?? undefined,
     recordingCount: u.recording_count,
     createdAt: u.created_at,
-    priority: o?.priority ?? fallbackPriority,
+    // Priority comes from the backend DB; fall back to local override only if missing
+    priority: u.priority ?? o?.priority ?? fallbackPriority,
     icon,
     isAccessible: o?.isAccessible ?? false,
     status: "scheduled",
@@ -165,17 +166,21 @@ export async function changePriority(speakerId: string, newPriority: number): Pr
   const speakers = await getSpeakers();
   const s = speakers.find((x) => x.id === speakerId);
   if (!s || s.isAccessible) return;
+
+  // Persist to backend first
+  await updateUserPriority(s.name, newPriority);
+
+  // Keep icon/isAccessible in AsyncStorage (priority stored in DB now)
   const overrides = await loadOverrides();
   overrides[s.name] = {
-    priority: newPriority,
+    priority: newPriority, // keep for offline fallback
     icon: overrides[s.name]?.icon ?? s.icon,
     isAccessible: overrides[s.name]?.isAccessible ?? false,
   };
   await saveOverrides(overrides);
-  const updated = speakers.map((x) =>
+  await writeCache(speakers.map((x) =>
     x.id === speakerId ? { ...x, priority: newPriority } : x,
-  );
-  await writeCache(updated);
+  ));
 }
 
 export async function deleteSpeaker(id: string): Promise<void> {

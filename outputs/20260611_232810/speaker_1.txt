@@ -1,9 +1,0 @@
-[Language: en]
-[Status: ✓  READY — meaningful speech detected]
-[RMS: -24.1 dBFS | Speech ratio: 68%]
-
-My name is Sunset. I have a blue cover in my room. I have a green cover in my room.
-
---- Segments ---
-[0.00s → 4.00s] My name is Sunset. I have a blue cover in my room.
-[4.00s → 7.00s] I have a green cover in my room.

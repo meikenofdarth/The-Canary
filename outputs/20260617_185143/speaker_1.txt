@@ -1,8 +1,0 @@
-[Language: en]
-[Status: ✓  READY — meaningful speech detected]
-[RMS: -25.3 dBFS | Speech ratio: 35%]
-
-jarvis tell me about the weather today.
-
---- Segments ---
-[0.00s → 4.00s] Jarvis tell me about the weather today.

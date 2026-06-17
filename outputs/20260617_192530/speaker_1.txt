@@ -1,8 +1,0 @@
-[Language: hi]
-[Status: ✓  READY — meaningful speech detected]
-[RMS: -24.4 dBFS | Speech ratio: 50%]
-
-jarvis tell me the weather
-
---- Segments ---
-[0.00s → 2.00s] Jarvis tell me the weather

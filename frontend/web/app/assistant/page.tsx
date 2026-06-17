@@ -49,44 +49,19 @@ export default function AssistantPage() {
   const processAudio = async (audioBlob: Blob) => {
     try {
       const result = await sendBackendCommand(audioBlob);
-      
       if (result.route === "IGNORE" || result.route === "CLARIFY") {
         setErrorMsg("Audio ignored (no wake word or command found).");
-        setState("idle");
-        return;
       }
-
-      const message = result.execution_result?.message;
-      if (message) {
-        speakResponse(message);
-      } else {
-        setState("idle");
-      }
+      // Backend speaks via TTS — no browser speech needed
+      setState("idle");
     } catch (err: any) {
-      console.error("Command processing failed:", err);
       setErrorMsg(err.message || "Failed to process command.");
       setState("idle");
     }
   };
 
-  const speakResponse = (text: string) => {
-    setState("speaking");
-    const utterance = new SpeechSynthesisUtterance(text);
-    
-    utterance.onend = () => {
-      setState("idle");
-    };
-    
-    utterance.onerror = () => {
-      setState("idle");
-    };
-
-    window.speechSynthesis.speak(utterance);
-  };
-
   const handleTap = () => {
-    if (state === "idle" || state === "speaking") {
-      window.speechSynthesis.cancel();
+    if (state === "idle") {
       startRecording();
     } else if (state === "listening") {
       stopRecording();

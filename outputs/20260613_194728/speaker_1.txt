@@ -1,8 +1,0 @@
-[Language: en]
-[Status: ✓  READY — meaningful speech detected]
-[RMS: -23.1 dBFS | Speech ratio: 45%]
-
-Hey Raju, how is the weather today?
-
---- Segments ---
-[0.00s → 3.00s] Hey Raju, how is the weather today?

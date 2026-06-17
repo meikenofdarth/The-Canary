@@ -1,9 +1,0 @@
-[Language: en]
-[Status: ✓  READY — meaningful speech detected]
-[RMS: -21.3 dBFS | Speech ratio: 72%]
-
-There is a foul, wafinmerum and there is a black hawksinmerum and there is a TV. Hey Raju, please switch off all alarms.
-
---- Segments ---
-[0.00s → 6.00s] There is a foul, wafinmerum and there is a black hawksinmerum and there is a TV.
-[6.00s → 9.00s] Hey Raju, please switch off all alarms.

@@ -1,8 +1,0 @@
-[Language: ur]
-[Status: ✓  READY — meaningful speech detected]
-[RMS: -23.1 dBFS | Speech ratio: 72%]
-
-را جو وہ تنطبِ در
-
---- Segments ---
-[0.00s → 3.42s] را جو وہ تنطبِ در  [low confidence]

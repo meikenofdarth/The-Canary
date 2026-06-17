@@ -1,8 +1,0 @@
-[Language: te]
-[Status: ✓  READY — meaningful speech detected]
-[RMS: -21.5 dBFS | Speech ratio: 39%]
-
-«Hey, Raju! What is the matter?»
-
---- Segments ---
-[0.00s → 2.76s] «Hey, Raju! What is the matter?»  [low confidence]

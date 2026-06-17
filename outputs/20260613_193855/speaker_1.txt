@@ -1,9 +1,0 @@
-[Language: pt]
-[Status: ✓  READY — meaningful speech detected]
-[RMS: -22.6 dBFS | Speech ratio: 41%]
-
-E lá, juo. Play a Song for Me.
-
---- Segments ---
-[0.00s → 1.00s] E lá, juo.  [low confidence]
-[1.00s → 3.00s] Play a Song for Me.  [low confidence]

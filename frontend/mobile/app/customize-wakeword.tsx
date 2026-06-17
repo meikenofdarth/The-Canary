@@ -1,171 +1,105 @@
-import { useState, useRef, useEffect } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Alert, Platform } from 'react-native';
+import { useState } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Audio } from 'expo-av';
+import { useAudioRecorder, useAudioPlayer, AudioModule, RecordingPresets } from 'expo-audio';
 import { ArrowLeft, Mic, MicOff, Play, Pause, Square, CheckCircle2, X } from 'lucide-react-native';
 import { COLORS, SPACING, RADIUS } from '../constants/theme';
-import { changeBackendWakeword } from '../lib/api';
+import { ENDPOINTS } from '../constants/api';
 
 export default function CustomizeWakewordPage() {
   const router = useRouter();
-  const [wakeword, setWakeword] = useState('');
-  
-  const [recordings, setRecordings] = useState<string[]>(['', '', '']);
+  const [recordings, setRecordings] = useState<(string | null)[]>([null, null, null]);
   const [isRecording, setIsRecording] = useState(false);
-  const [currentRecordingIndex, setCurrentRecordingIndex] = useState<number | null>(null);
-  
-  const [recordingObj, setRecordingObj] = useState<Audio.Recording | null>(null);
-  const [recordingTime, setRecordingTime] = useState(0);
-  
-  const [sound, setSound] = useState<Audio.Sound | null>(null);
-  const [playingIndex, setPlayingIndex] = useState<number | null>(null);
-  const [isPlaying, setIsPlaying] = useState(false);
-  
+  const [activeIndex, setActiveIndex] = useState<number | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [submitError, setSubmitError] = useState('');
+  const [error, setError] = useState('');
+  const [playingIndex, setPlayingIndex] = useState<number | null>(null);
 
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
-
-  useEffect(() => {
-    return sound ? () => { sound.unloadAsync(); } : undefined;
-  }, [sound]);
+  const audioRecorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
+  const player = useAudioPlayer(null);
 
   const startRecording = async (index: number) => {
-    try {
-      const permission = await Audio.requestPermissionsAsync();
-      if (permission.status !== 'granted') {
-        Alert.alert('Permission Denied', 'Microphone access is required to record voice samples.');
-        return;
-      }
-      
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: true,
-        playsInSilentModeIOS: true,
-      });
-
-      const { recording } = await Audio.Recording.createAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY);
-      setRecordingObj(recording);
-      setIsRecording(true);
-      setCurrentRecordingIndex(index);
-      setRecordingTime(0);
-
-      timerRef.current = setInterval(() => {
-        setRecordingTime((prev) => prev + 1);
-      }, 1000);
-    } catch (err) {
-      console.error('Failed to start recording', err);
-    }
+    const perm = await AudioModule.requestRecordingPermissionsAsync();
+    if (!perm.granted) { Alert.alert('Permission Required', 'Microphone access is needed.'); return; }
+    await audioRecorder.prepareToRecordAsync();
+    audioRecorder.record();
+    setIsRecording(true);
+    setActiveIndex(index);
   };
 
   const stopRecording = async () => {
-    if (!recordingObj || currentRecordingIndex === null) return;
-
-    if (timerRef.current) clearInterval(timerRef.current);
-    
-    await recordingObj.stopAndUnloadAsync();
-    const uri = recordingObj.getURI();
-    setRecordingObj(null);
+    await audioRecorder.stop();
+    const uri = audioRecorder.uri;
+    if (uri && activeIndex !== null) {
+      setRecordings(prev => { const n = [...prev]; n[activeIndex] = uri; return n; });
+    }
     setIsRecording(false);
-
-    if (uri) {
-      const newRecs = [...recordings];
-      newRecs[currentRecordingIndex] = uri;
-      setRecordings(newRecs);
-    }
-    setCurrentRecordingIndex(null);
-  };
-
-  const playRecording = async (index: number) => {
-    const uri = recordings[index];
-    if (!uri) return;
-
-    if (sound) {
-      await sound.unloadAsync();
-    }
-    
-    await Audio.setAudioModeAsync({
-      allowsRecordingIOS: false,
-      playsInSilentModeIOS: true,
-    });
-
-    const { sound: newSound } = await Audio.Sound.createAsync({ uri }, { shouldPlay: true });
-    setSound(newSound);
-    setPlayingIndex(index);
-    setIsPlaying(true);
-
-    newSound.setOnPlaybackStatusUpdate((status) => {
-      if (status.isLoaded && status.didJustFinish) {
-        setIsPlaying(false);
-        setPlayingIndex(null);
-      }
-    });
-  };
-
-  const pausePlayback = async () => {
-    if (sound) {
-      await sound.pauseAsync();
-      setIsPlaying(false);
-    }
-  };
-
-  const stopPlayback = async () => {
-    if (sound) {
-      await sound.stopAsync();
-      setIsPlaying(false);
-      setPlayingIndex(null);
-    }
+    setActiveIndex(null);
   };
 
   const deleteRecording = (index: number) => {
-    const newRecs = [...recordings];
-    newRecs[index] = '';
-    setRecordings(newRecs);
+    if (playingIndex === index) { player.pause(); setPlayingIndex(null); }
+    setRecordings(prev => { const n = [...prev]; n[index] = null; return n; });
   };
 
+  const togglePlay = (index: number) => {
+    const uri = recordings[index];
+    if (!uri) return;
+    if (playingIndex === index) {
+      player.playing ? player.pause() : player.play();
+    } else {
+      player.replace({ uri });
+      player.play();
+      setPlayingIndex(index);
+    }
+  };
+
+  const stopPlayback = () => { player.pause(); setPlayingIndex(null); };
+
+  // Use XMLHttpRequest — React Native's fetch doesn't support { uri, type, name } FormData reliably
   const handleSubmit = async () => {
-    setSubmitError('');
-    
-    if (!wakeword.trim()) {
-      setSubmitError('Please enter a wake word');
-      return;
-    }
-
-    if (recordings.some(r => !r)) {
-      setSubmitError('Please complete all 3 recordings');
-      return;
-    }
-
+    if (recordings.some(r => !r)) { setError('Please complete all 3 recordings'); return; }
+    setError('');
     setIsSubmitting(true);
     try {
-      const audioBlobs = await Promise.all(recordings.map(async (uri) => {
-        const response = await fetch(uri);
-        return await response.blob();
-      }));
-
-      await changeBackendWakeword(audioBlobs);
-      
-      if (Platform.OS === 'web') {
-        window.alert("Wake word successfully updated!");
-        router.push('/dashboard');
-      } else {
-        Alert.alert(
-          "Success",
-          "Wake word successfully updated!",
-          [{ text: "OK", onPress: () => router.push('/dashboard') }]
-        );
-      }
+      await new Promise<void>((resolve, reject) => {
+        const fd = new FormData();
+        recordings.forEach((uri, i) => {
+          fd.append('audio_files', { uri: uri!, type: 'audio/m4a', name: `wakeword_${i + 1}.m4a` } as any);
+        });
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', ENDPOINTS.changeWakeword);
+        xhr.setRequestHeader('Accept', 'application/json');
+        xhr.onload = () => {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            const data = JSON.parse(xhr.responseText);
+            Alert.alert('Success', `Wake word set to "${data.word}"!`, [
+              { text: 'OK', onPress: () => router.push('/dashboard') },
+            ]);
+            resolve();
+          } else {
+            let msg = `HTTP ${xhr.status}`;
+            try { msg = JSON.parse(xhr.responseText).detail || msg; } catch {}
+            reject(new Error(msg));
+          }
+        };
+        xhr.onerror = () => reject(new Error('Network error. Check your connection.'));
+        xhr.send(fd);
+      });
     } catch (err: any) {
-      setSubmitError(err.message || 'Failed to update wake word');
+      setError(err.message || 'Failed to update wake word');
     } finally {
       setIsSubmitting(false);
     }
   };
 
+  const allDone = recordings.every(Boolean);
+
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.push('/dashboard')} style={styles.backButton}>
+        <TouchableOpacity onPress={() => router.push('/dashboard')} style={styles.backBtn}>
           <ArrowLeft color={COLORS.foreground} size={20} />
         </TouchableOpacity>
         <View>
@@ -174,85 +108,52 @@ export default function CustomizeWakewordPage() {
         </View>
       </View>
 
-      <ScrollView contentContainerStyle={styles.scrollContent}>
-        
+      <ScrollView contentContainerStyle={styles.content}>
+        {!!error && <View style={styles.errorBox}><Text style={styles.errorText}>{error}</Text></View>}
+
         <View style={styles.card}>
-          {submitError ? (
-            <View style={styles.errorBox}>
-              <Text style={styles.errorText}>{submitError}</Text>
-            </View>
-          ) : null}
-
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>New Wake Word</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="e.g. Canary, Jarvis, Computer"
-              placeholderTextColor={COLORS.mutedForeground}
-              value={wakeword}
-              onChangeText={setWakeword}
-            />
-            <Text style={styles.helperText}>
-              Choose a distinct word or short phrase. Avoid very common words.
-            </Text>
-          </View>
-        </View>
-
-        <View style={[styles.card, { marginTop: SPACING.lg }]}>
           <Text style={styles.cardTitle}>Voice Samples</Text>
-          <Text style={styles.cardDesc}>
-            Record yourself saying "{wakeword || 'your wake word'}" 3 times to train the system.
-          </Text>
+          <Text style={styles.cardDesc}>Record yourself saying your chosen wake word 3 times to train the system.</Text>
 
           {[0, 1, 2].map(index => {
-            const hasRecording = !!recordings[index];
-            const isRecordingThis = isRecording && currentRecordingIndex === index;
-            
+            const uri = recordings[index];
+            const isThis = isRecording && activeIndex === index;
+            const isThisPlaying = playingIndex === index;
+
             return (
-              <View key={index} style={[styles.recordingRow, hasRecording && styles.recordingRowDone]}>
-                <View style={styles.recordingInfo}>
-                  <View style={[styles.recordingNumber, hasRecording && styles.recordingNumberDone]}>
-                    <Text style={[styles.recordingNumberText, hasRecording && { color: COLORS.success }]}>
-                      {index + 1}
-                    </Text>
+              <View key={index} style={[styles.row, !!uri && styles.rowDone]}>
+                <View style={styles.rowLeft}>
+                  <View style={[styles.badge, !!uri && styles.badgeDone]}>
+                    <Text style={[styles.badgeText, !!uri && { color: COLORS.success }]}>{index + 1}</Text>
                   </View>
-                  <Text style={styles.recordingLabel}>Sample {index + 1}</Text>
-                  {hasRecording && <CheckCircle2 color={COLORS.success} size={16} style={{ marginLeft: SPACING.sm }} />}
+                  <Text style={styles.rowLabel}>Sample {index + 1}</Text>
+                  {!!uri && <CheckCircle2 color={COLORS.success} size={16} style={{ marginLeft: 8 }} />}
                 </View>
 
-                {!hasRecording ? (
-                  <View>
-                    {isRecordingThis ? (
-                      <TouchableOpacity style={styles.stopButton} onPress={stopRecording}>
-                        <MicOff color="white" size={16} />
-                        <Text style={styles.stopButtonText}>Stop</Text>
-                      </TouchableOpacity>
-                    ) : (
-                      <TouchableOpacity 
-                        style={[styles.recordButton, isRecording && !isRecordingThis && { opacity: 0.5 }]} 
-                        onPress={() => startRecording(index)}
-                        disabled={isRecording && !isRecordingThis}
-                      >
-                        <Mic color={COLORS.primaryForeground} size={16} />
-                        <Text style={styles.recordButtonText}>Record</Text>
+                {!uri ? (
+                  isThis ? (
+                    <TouchableOpacity style={styles.stopBtn} onPress={stopRecording}>
+                      <MicOff color="#fff" size={16} /><Text style={styles.stopBtnText}>Stop</Text>
+                    </TouchableOpacity>
+                  ) : (
+                    <TouchableOpacity style={[styles.recBtn, isRecording && { opacity: 0.4 }]}
+                      onPress={() => startRecording(index)} disabled={isRecording}>
+                      <Mic color={COLORS.primaryForeground} size={16} /><Text style={styles.recBtnText}>Record</Text>
+                    </TouchableOpacity>
+                  )
+                ) : (
+                  <View style={styles.playbackRow}>
+                    <TouchableOpacity style={styles.playBtn} onPress={() => togglePlay(index)}>
+                      {isThisPlaying && player.playing
+                        ? <Pause color={COLORS.foreground} size={16} />
+                        : <Play color={COLORS.foreground} size={16} />}
+                    </TouchableOpacity>
+                    {isThisPlaying && (
+                      <TouchableOpacity style={styles.playBtn} onPress={stopPlayback}>
+                        <Square color={COLORS.foreground} size={16} />
                       </TouchableOpacity>
                     )}
-                  </View>
-                ) : (
-                  <View style={styles.playbackControls}>
-                    <TouchableOpacity style={styles.playButton} onPress={() => {
-                      if (playingIndex === index && isPlaying) pausePlayback();
-                      else playRecording(index);
-                    }}>
-                      {playingIndex === index && isPlaying ? 
-                        <Pause color={COLORS.foreground} size={16} /> : 
-                        <Play color={COLORS.foreground} size={16} />
-                      }
-                    </TouchableOpacity>
-                    <TouchableOpacity style={styles.playButton} onPress={stopPlayback}>
-                      <Square color={COLORS.foreground} size={16} />
-                    </TouchableOpacity>
-                    <TouchableOpacity style={[styles.playButton, { borderColor: COLORS.destructive }]} onPress={() => deleteRecording(index)}>
+                    <TouchableOpacity style={styles.deleteBtn} onPress={() => deleteRecording(index)}>
                       <X color={COLORS.destructive} size={16} />
                     </TouchableOpacity>
                   </View>
@@ -262,220 +163,84 @@ export default function CustomizeWakewordPage() {
           })}
         </View>
 
-        <View style={styles.submitSection}>
-          <TouchableOpacity style={styles.outlineButton} onPress={() => router.push('/dashboard')}>
-            <Text style={styles.outlineButtonText}>Cancel</Text>
+        <View style={styles.actions}>
+          <TouchableOpacity style={styles.cancelBtn} onPress={() => router.push('/dashboard')}>
+            <Text style={styles.cancelText}>Cancel</Text>
           </TouchableOpacity>
-          <TouchableOpacity 
-            style={[styles.submitButton, isSubmitting && { opacity: 0.5 }]} 
-            onPress={handleSubmit}
-            disabled={isSubmitting}
-          >
-            <Text style={styles.submitButtonText}>{isSubmitting ? 'Updating...' : 'Update Wake Word'}</Text>
+          <TouchableOpacity style={[styles.submitBtn, (!allDone || isSubmitting) && { opacity: 0.5 }]}
+            onPress={handleSubmit} disabled={!allDone || isSubmitting}>
+            <Text style={styles.submitText}>{isSubmitting ? 'Updating...' : 'Update Wake Word'}</Text>
           </TouchableOpacity>
         </View>
-
       </ScrollView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: COLORS.background,
-  },
+  container: { flex: 1, backgroundColor: COLORS.background },
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: SPACING.lg,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
-    backgroundColor: COLORS.card,
-    gap: SPACING.md,
-  },
-  backButton: {
-    padding: SPACING.xs,
-  },
-  title: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: COLORS.foreground,
-  },
-  subtitle: {
-    fontSize: 14,
-    color: COLORS.mutedForeground,
-  },
-  scrollContent: {
-    padding: SPACING.lg,
-  },
-  card: {
-    backgroundColor: COLORS.card,
-    borderRadius: RADIUS.lg,
-    padding: SPACING.lg,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 10,
-    elevation: 2,
-  },
-  cardTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: COLORS.foreground,
-    marginBottom: SPACING.xs,
-  },
-  cardDesc: {
-    fontSize: 14,
-    color: COLORS.mutedForeground,
-    marginBottom: SPACING.lg,
-  },
-  inputGroup: {
-    marginBottom: SPACING.sm,
-  },
-  label: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: COLORS.foreground,
-    marginBottom: SPACING.xs,
-  },
-  input: {
-    backgroundColor: COLORS.secondary,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    borderRadius: RADIUS.md,
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.md,
-    fontSize: 16,
-    color: COLORS.foreground,
-  },
-  helperText: {
-    fontSize: 12,
-    color: COLORS.mutedForeground,
-    marginTop: 4,
-  },
-  recordingRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: SPACING.md,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    borderRadius: RADIUS.md,
-    marginBottom: SPACING.md,
-    backgroundColor: COLORS.secondary,
-  },
-  recordingRowDone: {
-    backgroundColor: COLORS.successLight,
-    borderColor: COLORS.success + '40',
-  },
-  recordingInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  recordingNumber: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: COLORS.border,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: SPACING.sm,
-  },
-  recordingNumberDone: {
-    backgroundColor: 'transparent',
-  },
-  recordingNumberText: {
-    fontSize: 12,
-    fontWeight: 'bold',
-    color: COLORS.mutedForeground,
-  },
-  recordingLabel: {
-    fontSize: 16,
-    fontWeight: '500',
-    color: COLORS.foreground,
-  },
-  recordButton: {
-    backgroundColor: COLORS.primary,
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: SPACING.sm,
-    paddingHorizontal: SPACING.md,
-    borderRadius: RADIUS.full,
-    gap: 6,
-  },
-  recordButtonText: {
-    color: COLORS.primaryForeground,
-    fontWeight: 'bold',
-    fontSize: 14,
-  },
-  stopButton: {
-    backgroundColor: COLORS.recordingRed,
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: SPACING.sm,
-    paddingHorizontal: SPACING.md,
-    borderRadius: RADIUS.full,
-    gap: 6,
-  },
-  stopButtonText: {
-    color: 'white',
-    fontWeight: 'bold',
-    fontSize: 14,
-  },
-  playbackControls: {
-    flexDirection: 'row',
-    gap: 6,
-  },
-  playButton: {
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    padding: 6,
-    borderRadius: RADIUS.md,
+    flexDirection: 'row', alignItems: 'center', gap: SPACING.md,
+    padding: SPACING.lg, borderBottomWidth: 1, borderBottomColor: COLORS.border,
     backgroundColor: COLORS.card,
   },
-  submitSection: {
-    flexDirection: 'row',
-    gap: SPACING.md,
-    marginTop: SPACING.xl,
-    marginBottom: SPACING.xl,
-  },
-  outlineButton: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    paddingVertical: SPACING.md,
-    borderRadius: RADIUS.md,
-    alignItems: 'center',
-  },
-  outlineButtonText: {
-    color: COLORS.foreground,
-    fontWeight: '600',
-  },
-  submitButton: {
-    flex: 1,
-    backgroundColor: COLORS.primary,
-    paddingVertical: SPACING.md,
-    borderRadius: RADIUS.md,
-    alignItems: 'center',
-  },
-  submitButtonText: {
-    color: COLORS.primaryForeground,
-    fontWeight: 'bold',
-    fontSize: 16,
-  },
+  backBtn: { padding: SPACING.xs },
+  title: { fontSize: 20, fontWeight: 'bold', color: COLORS.foreground },
+  subtitle: { fontSize: 14, color: COLORS.mutedForeground },
+  content: { padding: SPACING.lg },
   errorBox: {
-    backgroundColor: COLORS.recordingRedLight,
-    borderWidth: 1,
-    borderColor: '#fca5a5',
-    padding: SPACING.md,
-    borderRadius: RADIUS.md,
-    marginBottom: SPACING.md,
+    backgroundColor: COLORS.recordingRedLight, borderWidth: 1, borderColor: '#fca5a5',
+    padding: SPACING.md, borderRadius: RADIUS.md, marginBottom: SPACING.md,
   },
-  errorText: {
-    color: '#991b1b',
-    fontSize: 14,
+  errorText: { color: '#991b1b', fontSize: 14 },
+  card: {
+    backgroundColor: COLORS.card, borderRadius: RADIUS.lg, padding: SPACING.lg,
+    borderWidth: 1, borderColor: COLORS.border,
   },
+  cardTitle: { fontSize: 18, fontWeight: 'bold', color: COLORS.foreground, marginBottom: 4 },
+  cardDesc: { fontSize: 14, color: COLORS.mutedForeground, marginBottom: SPACING.lg },
+  row: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    padding: SPACING.md, borderWidth: 1, borderColor: COLORS.border,
+    borderRadius: RADIUS.md, marginBottom: SPACING.md, backgroundColor: COLORS.secondary,
+  },
+  rowDone: { backgroundColor: COLORS.successLight, borderColor: COLORS.success + '40' },
+  rowLeft: { flexDirection: 'row', alignItems: 'center' },
+  badge: {
+    width: 24, height: 24, borderRadius: 12, backgroundColor: COLORS.border,
+    alignItems: 'center', justifyContent: 'center', marginRight: SPACING.sm,
+  },
+  badgeDone: { backgroundColor: 'transparent' },
+  badgeText: { fontSize: 12, fontWeight: 'bold', color: COLORS.mutedForeground },
+  rowLabel: { fontSize: 16, fontWeight: '500', color: COLORS.foreground },
+  recBtn: {
+    backgroundColor: COLORS.primary, flexDirection: 'row', alignItems: 'center',
+    paddingVertical: SPACING.sm, paddingHorizontal: SPACING.md, borderRadius: RADIUS.full, gap: 6,
+  },
+  recBtnText: { color: COLORS.primaryForeground, fontWeight: 'bold', fontSize: 14 },
+  stopBtn: {
+    backgroundColor: COLORS.recordingRed, flexDirection: 'row', alignItems: 'center',
+    paddingVertical: SPACING.sm, paddingHorizontal: SPACING.md, borderRadius: RADIUS.full, gap: 6,
+  },
+  stopBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 14 },
+  playbackRow: { flexDirection: 'row', gap: 6, alignItems: 'center' },
+  playBtn: {
+    borderWidth: 1, borderColor: COLORS.border, padding: 8,
+    borderRadius: RADIUS.md, backgroundColor: COLORS.card,
+  },
+  deleteBtn: {
+    borderWidth: 1, borderColor: COLORS.destructive, padding: 8,
+    borderRadius: RADIUS.md, backgroundColor: COLORS.recordingRedLight,
+  },
+  actions: { flexDirection: 'row', gap: SPACING.md, marginTop: SPACING.xl, marginBottom: SPACING.xl },
+  cancelBtn: {
+    flex: 1, borderWidth: 1, borderColor: COLORS.border,
+    paddingVertical: SPACING.md, borderRadius: RADIUS.md, alignItems: 'center',
+  },
+  cancelText: { color: COLORS.foreground, fontWeight: '600' },
+  submitBtn: {
+    flex: 1, backgroundColor: COLORS.primary,
+    paddingVertical: SPACING.md, borderRadius: RADIUS.md, alignItems: 'center',
+  },
+  submitText: { color: COLORS.primaryForeground, fontWeight: 'bold', fontSize: 16 },
 });

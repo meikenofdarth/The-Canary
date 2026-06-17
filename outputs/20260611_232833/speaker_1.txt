@@ -1,8 +1,0 @@
-[Language: en]
-[Status: ✓  READY — meaningful speech detected]
-[RMS: -21.0 dBFS | Speech ratio: 79%]
-
-Hello Canary, my name is Sancho, I have a green scabal in the eye rose, I also have a blue
-
---- Segments ---
-[0.00s → 7.00s] Hello Canary, my name is Sancho, I have a green scabal in the eye rose, I also have a blue

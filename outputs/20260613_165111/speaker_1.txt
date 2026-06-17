@@ -1,5 +1,0 @@
-[Language: en]
-[Status: ✗  REJECTED — no speech (silence)]
-[RMS: -32.8 dBFS | Speech ratio: 29%]
-
-(no speech detected in this stream)
