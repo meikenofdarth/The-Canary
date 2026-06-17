@@ -1,0 +1,8 @@
+[Language: hi]
+[Status: ✓  READY — meaningful speech detected]
+[RMS: -26.2 dBFS | Speech ratio: 62%]
+
+raju tell me the weather.
+
+--- Segments ---
+[0.00s → 2.00s] Raju tell me the weather.  [low confidence]

@@ -110,3 +110,23 @@ export async function fetchSystemStatus(): Promise<{
   if (!res.ok) throw new Error(`Status fetch failed: HTTP ${res.status}`);
   return res.json();
 }
+
+export async function sendBackendCommand(audioBlob: Blob): Promise<{
+  route: string;
+  transcript: string;
+  speaker: string;
+  domain: string;
+  entities: Record<string, any>;
+  execution_result: any;
+  drs_mode: string;
+}> {
+  const fd = new FormData();
+  fd.append("audio", audioBlob, "command.webm");
+
+  const res = await fetch(API.command, { method: "POST", body: fd });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || `Command failed: HTTP ${res.status}`);
+  }
+  return res.json();
+}

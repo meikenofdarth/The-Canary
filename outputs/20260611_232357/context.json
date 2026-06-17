@@ -1,0 +1,28 @@
+{
+  "timestamp": "2026-06-11T23:24:12.187700",
+  "session_dir": "outputs/20260611_232357",
+  "drs_mode": "A",
+  "scene": {
+    "speaker_count": 1,
+    "complexity": 0.119,
+    "noise_level": 0.396,
+    "simul_speech": 0.0
+  },
+  "speakers": [
+    {
+      "id": "speaker_1",
+      "status": "READY",
+      "transcript": "Hello Canary I have a blue towel in my room. I also have a brown towel in my room.",
+      "wakeword": true,
+      "wakeword_confidence": 1.0,
+      "wakeword_phrase": "hello canary",
+      "type": "COMMAND",
+      "type_confidence": 0.95
+    }
+  ],
+  "wakeword_count": 1,
+  "command_count": 1,
+  "conflict": false,
+  "conflict_pair": null,
+  "route": "EXECUTE"
+}

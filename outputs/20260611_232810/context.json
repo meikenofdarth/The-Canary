@@ -1,0 +1,28 @@
+{
+  "timestamp": "2026-06-11T23:28:27.416398",
+  "session_dir": "outputs/20260611_232810",
+  "drs_mode": "A",
+  "scene": {
+    "speaker_count": 1,
+    "complexity": 0.217,
+    "noise_level": 0.722,
+    "simul_speech": 0.0
+  },
+  "speakers": [
+    {
+      "id": "speaker_1",
+      "status": "READY",
+      "transcript": "My name is Sunset. I have a blue cover in my room. I have a green cover in my room.",
+      "wakeword": false,
+      "wakeword_confidence": 0.0,
+      "wakeword_phrase": null,
+      "type": "UNKNOWN",
+      "type_confidence": 0.0
+    }
+  ],
+  "wakeword_count": 0,
+  "command_count": 0,
+  "conflict": false,
+  "conflict_pair": null,
+  "route": "IGNORE"
+}

@@ -1,0 +1,67 @@
+{
+  "timestamp": "2026-06-13T19:07:10.935662",
+  "session_dir": "outputs/20260613_190656",
+  "drs_mode": "A",
+  "scene": {
+    "speaker_count": 1,
+    "complexity": 0.145,
+    "noise_level": 0.484,
+    "simul_speech": 0.0
+  },
+  "speakers": [
+    {
+      "id": "speaker_1",
+      "status": "READY",
+      "transcript": "Hello Raju, tell me the weather in Delhi today.",
+      "wakeword": true,
+      "wakeword_confidence": 1.0,
+      "wakeword_phrase": "hello raju",
+      "type": "COMMAND",
+      "type_confidence": 0.95,
+      "identity": "Sanchit",
+      "identity_confidence": 0.7588,
+      "known_user": true,
+      "start_time": 0.0,
+      "intent_result": {
+        "domain": "WEATHER",
+        "polarity": "POSITIVE",
+        "confidence": 0.55,
+        "entities": {
+          "time_reference": "today",
+          "location": "Delhi"
+        },
+        "raw_signals": [
+          "weather"
+        ],
+        "original_text": "Hello Raju, tell me the weather in Delhi today."
+      }
+    }
+  ],
+  "wakeword_count": 1,
+  "command_count": 1,
+  "conflict": false,
+  "conflict_pair": null,
+  "route": "EXECUTE",
+  "arbitration": {
+    "winner": "speaker_1",
+    "route": "EXECUTE",
+    "reason": "Sanchit issued the only wakeword command. Priority: 0.90.",
+    "speakers": [
+      {
+        "id": "speaker_1",
+        "identity": "Sanchit",
+        "identity_confidence": 0.7588,
+        "known_user": true,
+        "wakeword": true,
+        "wakeword_confidence": 1.0,
+        "transcript": "Hello Raju, tell me the weather in Delhi today.",
+        "type": "COMMAND",
+        "separation_quality": 1.0,
+        "identity_note": "",
+        "start_time": 0.0,
+        "priority": 0.9035,
+        "intent": "WEATHER"
+      }
+    ]
+  }
+}

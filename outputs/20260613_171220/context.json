@@ -1,0 +1,52 @@
+{
+  "timestamp": "2026-06-13T17:12:51.460325",
+  "session_dir": "outputs/20260613_171220",
+  "drs_mode": "A",
+  "scene": {
+    "speaker_count": 1,
+    "complexity": 0.121,
+    "noise_level": 0.403,
+    "simul_speech": 0.0
+  },
+  "speakers": [
+    {
+      "id": "speaker_1",
+      "status": "READY",
+      "transcript": "Hello my name is Sanchit so there has been a black box in my room which is a good box and I have a brown travel and a grey laptop. I am also making some notes about what to do. So this ...",
+      "wakeword": false,
+      "wakeword_confidence": 0.0,
+      "wakeword_phrase": null,
+      "type": "UNKNOWN",
+      "type_confidence": 0.0,
+      "identity": "Sanchit",
+      "identity_confidence": 0.8603,
+      "known_user": true
+    }
+  ],
+  "wakeword_count": 0,
+  "command_count": 0,
+  "conflict": false,
+  "conflict_pair": null,
+  "route": "IGNORE",
+  "arbitration": {
+    "winner": null,
+    "route": "IGNORE",
+    "reason": "No wakeword commands detected.",
+    "speakers": [
+      {
+        "id": "speaker_1",
+        "identity": "Sanchit",
+        "identity_confidence": 0.8603,
+        "known_user": true,
+        "wakeword": false,
+        "wakeword_confidence": 0.0,
+        "transcript": "Hello my name is Sanchit so there has been a black box in my room which is a good box and I have a brown travel and a grey laptop. I am also making some notes about what to do. So this ...",
+        "type": "UNKNOWN",
+        "separation_quality": 1.0,
+        "identity_note": "",
+        "priority": 0.5441,
+        "intent": "GREETING"
+      }
+    ]
+  }
+}

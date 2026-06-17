@@ -216,6 +216,23 @@ else:
     _ACTIVE_THRESHOLD = 0.75
     _IS_CANARY        = True
 
+def reload_config() -> None:
+    """Reloads the custom wakeword configuration into module-level variables dynamically."""
+    global _ACTIVE_WORD, _ACTIVE_WAKEWORDS, _ACTIVE_FUZZY, _ACTIVE_THRESHOLD, _IS_CANARY
+    cfg = _load_custom_config()
+    if cfg:
+        _ACTIVE_WORD = cfg["word"]
+        _ACTIVE_WAKEWORDS = _build_custom_wakewords(_ACTIVE_WORD)
+        _ACTIVE_FUZZY = cfg.get("lookup_table", {})
+        _ACTIVE_THRESHOLD = float(cfg.get("threshold", 0.75))
+        _IS_CANARY = (_ACTIVE_WORD == "canary")
+    else:
+        _ACTIVE_WORD = "canary"
+        _ACTIVE_WAKEWORDS = _CANARY_WAKEWORDS
+        _ACTIVE_FUZZY = _CANARY_FUZZY_MAP
+        _ACTIVE_THRESHOLD = 0.75
+        _IS_CANARY = True
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 #  C++ COLD-PATH LOOKUP
@@ -261,9 +278,13 @@ def detect_wakeword(text: str) -> dict:
         "matched_phrase":      str | None
     }
     """
+    # Force dynamic sync of wakeword configuration (fixes multi-worker or out-of-sync state)
+    reload_config()
+
     lower = text.lower().strip()
 
     # ── 1. Exact match ────────────────────────────────────────────────────
+    print(f"DEBUG: detect_wakeword({text!r}) | ACTIVE_WORD={_ACTIVE_WORD} | THRESH={_ACTIVE_THRESHOLD} | IS_CANARY={_IS_CANARY}")
     for phrase in _ACTIVE_WAKEWORDS:
         if phrase in lower:
             return {

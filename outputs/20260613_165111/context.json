@@ -1,0 +1,79 @@
+{
+  "timestamp": "2026-06-13T16:51:28.671064",
+  "session_dir": "outputs/20260613_165111",
+  "drs_mode": "C",
+  "scene": {
+    "speaker_count": 2,
+    "complexity": 0.859,
+    "noise_level": 0.863,
+    "simul_speech": 1.0
+  },
+  "speakers": [
+    {
+      "id": "speaker_1",
+      "status": "REJECTED",
+      "transcript": "",
+      "wakeword": false,
+      "wakeword_confidence": 0.0,
+      "wakeword_phrase": null,
+      "type": "UNKNOWN",
+      "type_confidence": 0.0,
+      "identity": "UNKNOWN",
+      "identity_confidence": 0.518,
+      "known_user": false
+    },
+    {
+      "id": "speaker_2",
+      "status": "REJECTED",
+      "transcript": "",
+      "wakeword": false,
+      "wakeword_confidence": 0.0,
+      "wakeword_phrase": null,
+      "type": "UNKNOWN",
+      "type_confidence": 0.0,
+      "identity": "Sanchit",
+      "identity_confidence": 0.5145,
+      "known_user": true
+    }
+  ],
+  "wakeword_count": 0,
+  "command_count": 0,
+  "conflict": false,
+  "conflict_pair": null,
+  "route": "IGNORE",
+  "arbitration": {
+    "winner": null,
+    "route": "IGNORE",
+    "reason": "No wakeword commands detected.",
+    "speakers": [
+      {
+        "id": "speaker_1",
+        "identity": "UNKNOWN",
+        "identity_confidence": 0.0,
+        "known_user": false,
+        "wakeword": false,
+        "wakeword_confidence": 0.0,
+        "transcript": "",
+        "type": "UNKNOWN",
+        "separation_quality": 1.0,
+        "identity_note": "",
+        "priority": 0.0,
+        "intent": null
+      },
+      {
+        "id": "speaker_2",
+        "identity": "Sanchit",
+        "identity_confidence": 0.5145,
+        "known_user": true,
+        "wakeword": false,
+        "wakeword_confidence": 0.0,
+        "transcript": "",
+        "type": "UNKNOWN",
+        "separation_quality": 1.0,
+        "identity_note": "",
+        "priority": 0.4058,
+        "intent": null
+      }
+    ]
+  }
+}

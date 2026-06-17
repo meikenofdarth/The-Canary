@@ -1,0 +1,8 @@
+[Language: en]
+[Status: ✓  READY — meaningful speech detected]
+[RMS: -28.9 dBFS | Speech ratio: 57%]
+
+jar with what is the well done today?
+
+--- Segments ---
+[0.00s → 7.00s] jar with what is the well done today?  [low confidence]

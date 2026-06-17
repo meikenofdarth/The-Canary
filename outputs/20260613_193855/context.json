@@ -1,0 +1,110 @@
+{
+  "timestamp": "2026-06-13T19:39:08.525680",
+  "session_dir": "outputs/20260613_193855",
+  "drs_mode": "B",
+  "scene": {
+    "speaker_count": 2,
+    "complexity": 0.675,
+    "noise_level": 0.252,
+    "simul_speech": 1.0
+  },
+  "speakers": [
+    {
+      "id": "speaker_1",
+      "status": "READY",
+      "transcript": "E lá, juo. Play a Song for Me.",
+      "wakeword": false,
+      "wakeword_confidence": 0.0,
+      "wakeword_phrase": null,
+      "type": "COMMAND",
+      "type_confidence": 0.95,
+      "identity": "Sanchit",
+      "identity_confidence": 0.6411,
+      "known_user": true,
+      "start_time": 0.0,
+      "intent_result": {
+        "domain": "SONGS",
+        "polarity": "POSITIVE",
+        "confidence": 1.0,
+        "entities": {
+          "song_title_candidate": "a Song for Me."
+        },
+        "raw_signals": [
+          "Play",
+          "Song",
+          "Play a",
+          "Play a Song"
+        ],
+        "original_text": "E lá, juo. Play a Song for Me."
+      }
+    },
+    {
+      "id": "speaker_2",
+      "status": "READY",
+      "transcript": "Hey Raju, play at Phong Pomeel.",
+      "wakeword": true,
+      "wakeword_confidence": 1.0,
+      "wakeword_phrase": "hey raju",
+      "type": "COMMAND",
+      "type_confidence": 0.95,
+      "identity": "Sanchit",
+      "identity_confidence": 0.7254,
+      "known_user": true,
+      "start_time": 0.0,
+      "intent_result": {
+        "domain": "SONGS",
+        "polarity": "POSITIVE",
+        "confidence": 0.55,
+        "entities": {
+          "song_title_candidate": "at Phong Pomeel."
+        },
+        "raw_signals": [
+          "play"
+        ],
+        "original_text": "Hey Raju, play at Phong Pomeel."
+      }
+    }
+  ],
+  "wakeword_count": 1,
+  "command_count": 1,
+  "conflict": false,
+  "conflict_pair": null,
+  "route": "EXECUTE",
+  "arbitration": {
+    "winner": "speaker_2",
+    "route": "EXECUTE",
+    "reason": "Sanchit issued the only wakeword command. Priority: 0.89.",
+    "speakers": [
+      {
+        "id": "speaker_1",
+        "identity": "Sanchit",
+        "identity_confidence": 0.6411,
+        "known_user": true,
+        "wakeword": false,
+        "wakeword_confidence": 0.0,
+        "transcript": "E lá, juo. Play a Song for Me.",
+        "type": "COMMAND",
+        "separation_quality": 1.0,
+        "identity_note": "",
+        "start_time": 0.0,
+        "priority": 0.4564,
+        "intent": "PLAY_MEDIA"
+      },
+      {
+        "id": "speaker_2",
+        "identity": "Sanchit",
+        "identity_confidence": 0.7254,
+        "known_user": true,
+        "wakeword": true,
+        "wakeword_confidence": 1.0,
+        "transcript": "Hey Raju, play at Phong Pomeel.",
+        "type": "COMMAND",
+        "separation_quality": 1.0,
+        "identity_note": "",
+        "start_time": 0.0,
+        "priority": 0.8902,
+        "intent": "PLAY_MEDIA"
+      }
+    ]
+  }
+}

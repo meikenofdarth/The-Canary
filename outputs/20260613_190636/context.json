@@ -1,0 +1,67 @@
+{
+  "timestamp": "2026-06-13T19:06:51.923118",
+  "session_dir": "outputs/20260613_190636",
+  "drs_mode": "A",
+  "scene": {
+    "speaker_count": 1,
+    "complexity": 0.134,
+    "noise_level": 0.446,
+    "simul_speech": 0.0
+  },
+  "speakers": [
+    {
+      "id": "speaker_1",
+      "status": "READY",
+      "transcript": "Hello, so can you please tell me the weather in Delhi today?",
+      "wakeword": false,
+      "wakeword_confidence": 0.0,
+      "wakeword_phrase": null,
+      "type": "COMMAND",
+      "type_confidence": 0.95,
+      "identity": "Sanchit",
+      "identity_confidence": 0.7796,
+      "known_user": true,
+      "start_time": 0.0,
+      "intent_result": {
+        "domain": "WEATHER",
+        "polarity": "POSITIVE",
+        "confidence": 0.55,
+        "entities": {
+          "time_reference": "today",
+          "location": "Delhi"
+        },
+        "raw_signals": [
+          "weather"
+        ],
+        "original_text": "Hello, so can you please tell me the weather in Delhi today?"
+      }
+    }
+  ],
+  "wakeword_count": 0,
+  "command_count": 0,
+  "conflict": false,
+  "conflict_pair": null,
+  "route": "IGNORE",
+  "arbitration": {
+    "winner": null,
+    "route": "IGNORE",
+    "reason": "No wakeword commands detected.",
+    "speakers": [
+      {
+        "id": "speaker_1",
+        "identity": "Sanchit",
+        "identity_confidence": 0.7796,
+        "known_user": true,
+        "wakeword": false,
+        "wakeword_confidence": 0.0,
+        "transcript": "Hello, so can you please tell me the weather in Delhi today?",
+        "type": "COMMAND",
+        "separation_quality": 1.0,
+        "identity_note": "",
+        "start_time": 0.0,
+        "priority": 0.5118,
+        "intent": "WEATHER"
+      }
+    ]
+  }
+}

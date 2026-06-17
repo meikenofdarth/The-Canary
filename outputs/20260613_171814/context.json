@@ -1,0 +1,79 @@
+{
+  "timestamp": "2026-06-13T17:18:38.280033",
+  "session_dir": "outputs/20260613_171814",
+  "drs_mode": "C",
+  "scene": {
+    "speaker_count": 2,
+    "complexity": 0.715,
+    "noise_level": 0.382,
+    "simul_speech": 1.0
+  },
+  "speakers": [
+    {
+      "id": "speaker_1",
+      "status": "READY",
+      "transcript": "There is a foul, wafinmerum and there is a black hawksinmerum and there is a TV. Hey Raju, please switch off all alarms.",
+      "wakeword": true,
+      "wakeword_confidence": 1.0,
+      "wakeword_phrase": "hey raju",
+      "type": "COMMAND",
+      "type_confidence": 0.95,
+      "identity": "Sanchit",
+      "identity_confidence": 0.7728,
+      "known_user": true
+    },
+    {
+      "id": "speaker_2",
+      "status": "READY",
+      "transcript": "So, let us round up the black box on the TV. Please switch off.",
+      "wakeword": false,
+      "wakeword_confidence": 0.0,
+      "wakeword_phrase": null,
+      "type": "UNKNOWN",
+      "type_confidence": 0.0,
+      "identity": "Sanchit",
+      "identity_confidence": 0.7034,
+      "known_user": true
+    }
+  ],
+  "wakeword_count": 1,
+  "command_count": 1,
+  "conflict": false,
+  "conflict_pair": null,
+  "route": "EXECUTE",
+  "arbitration": {
+    "winner": "speaker_1",
+    "route": "EXECUTE",
+    "reason": "Sanchit issued the only wakeword command. Priority: 0.91.",
+    "speakers": [
+      {
+        "id": "speaker_1",
+        "identity": "Sanchit",
+        "identity_confidence": 0.7728,
+        "known_user": true,
+        "wakeword": true,
+        "wakeword_confidence": 1.0,
+        "transcript": "There is a foul, wafinmerum and there is a black hawksinmerum and there is a TV. Hey Raju, please switch off all alarms.",
+        "type": "COMMAND",
+        "separation_quality": 1.0,
+        "identity_note": "",
+        "priority": 0.9091,
+        "intent": "DEVICE_OFF"
+      },
+      {
+        "id": "speaker_2",
+        "identity": "Sanchit",
+        "identity_confidence": 0.7034,
+        "known_user": true,
+        "wakeword": false,
+        "wakeword_confidence": 0.0,
+        "transcript": "So, let us round up the black box on the TV. Please switch off.",
+        "type": "UNKNOWN",
+        "separation_quality": 1.0,
+        "identity_note": "",
+        "priority": 0.4814,
+        "intent": "DEVICE_OFF"
+      }
+    ]
+  }
+}

@@ -1,0 +1,8 @@
+[Language: en]
+[Status: ✓  READY — meaningful speech detected]
+[RMS: -23.5 dBFS | Speech ratio: 81%]
+
+tell me what happened yesterday
+
+--- Segments ---
+[0.00s → 3.00s] Tell me what happened yesterday  [low confidence]

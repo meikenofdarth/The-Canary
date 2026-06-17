@@ -1,0 +1,66 @@
+{
+  "timestamp": "2026-06-17T18:51:55.826094",
+  "session_dir": "outputs/20260617_185143",
+  "drs_mode": "A",
+  "scene": {
+    "speaker_count": 1,
+    "complexity": 0.066,
+    "noise_level": 0.219,
+    "simul_speech": 0.0
+  },
+  "speakers": [
+    {
+      "id": "speaker_1",
+      "status": "READY",
+      "transcript": "jarvis tell me about the weather today.",
+      "wakeword": true,
+      "wakeword_confidence": 1.0,
+      "wakeword_phrase": "jarvis",
+      "type": "COMMAND",
+      "type_confidence": 0.95,
+      "identity": "UNKNOWN",
+      "identity_confidence": 0.8255,
+      "known_user": false,
+      "start_time": 0.0,
+      "intent_result": {
+        "domain": "WEATHER",
+        "polarity": "POSITIVE",
+        "confidence": 0.55,
+        "entities": {
+          "time_reference": "today"
+        },
+        "raw_signals": [
+          "weather"
+        ],
+        "original_text": "jarvis tell me about the weather today."
+      }
+    }
+  ],
+  "wakeword_count": 1,
+  "command_count": 1,
+  "conflict": false,
+  "conflict_pair": null,
+  "route": "EXECUTE",
+  "arbitration": {
+    "winner": "speaker_1",
+    "route": "EXECUTE",
+    "reason": "Unknown speaker issued the only wakeword command. Priority: 0.40.",
+    "speakers": [
+      {
+        "id": "speaker_1",
+        "identity": "UNKNOWN",
+        "identity_confidence": 0.0,
+        "known_user": false,
+        "wakeword": true,
+        "wakeword_confidence": 1.0,
+        "transcript": "jarvis tell me about the weather today.",
+        "type": "COMMAND",
+        "separation_quality": 1.0,
+        "identity_note": "",
+        "start_time": 0.0,
+        "priority": 0.4,
+        "intent": "WEATHER"
+      }
+    ]
+  }
+}

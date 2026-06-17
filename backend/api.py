@@ -725,6 +725,10 @@ async def change_wakeword_endpoint(
             )
             variants_count = len(lookup_table)
 
+        # Reload the wakeword detector state dynamically
+        from computation.intelligence.wakeword_detector import reload_config
+        reload_config()
+
         return {
             "word": winner,
             "variants_generated": variants_count,

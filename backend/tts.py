@@ -15,28 +15,15 @@ def init_mixer():
         pygame.mixer.init()
 
 def speak(text: str, lang: str = 'en'):
-    """Converts text to speech and plays it immediately."""
+    """Logs the text to speech intended response.
+    
+    Audio playback has been disabled on the backend as TTS is now 
+    handled natively by the browser on the frontend web interface.
+    """
     if not text:
         return
         
-    print(f"    [TTS] Speaking: '{text}'")
-    
-    # Generate speech
-    tts = gTTS(text=text, lang=lang)
-    
-    # Save to temp file
-    temp_dir = tempfile.gettempdir()
-    temp_file = os.path.join(temp_dir, "canary_tts_output.mp3")
-    tts.save(temp_file)
-    
-    # Play
-    play_audio_file(temp_file)
-    
-    # Cleanup
-    try:
-        os.remove(temp_file)
-    except OSError:
-        pass
+    print(f"    [TTS] Backend playback disabled. Frontend will speak: '{text}'")
 
 def play_audio_file(filepath: str, max_duration_sec: int = 0):
     """Plays an audio file (MP3, WAV, OGG) using pygame mixer."""

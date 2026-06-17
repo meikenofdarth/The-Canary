@@ -1,0 +1,10 @@
+[Language: en]
+[Status: ✓  READY — meaningful speech detected]
+[RMS: -21.5 dBFS | Speech ratio: 65%]
+
+Hello my name is Sanchit so there has been a black box in my room which is a good box and I have a brown travel and a grey laptop. I am also making some notes about what to do. So this ...
+
+--- Segments ---
+[0.00s → 6.60s] Hello my name is Sanchit so there has been a black box in my room which is a good
+[6.60s → 13.12s] box and I have a brown travel and a grey laptop. I am also making some notes about
+[13.12s → 15.48s] what to do. So this ...

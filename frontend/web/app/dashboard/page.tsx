@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { DashboardNavbar } from '@/components/dashboard-navbar';
 import { UsageChart } from '@/components/usage-chart';
 import { SpeakersList } from '@/components/speakers-list';
-import { Plus, Settings, List } from 'lucide-react';
+import { Plus, Settings, List, Mic } from 'lucide-react';
 import { fetchSystemStatus } from '@/lib/api';
 import { refreshSpeakers } from '@/lib/speakers-store';
 
@@ -94,6 +94,14 @@ export default function Dashboard() {
             >
               <Settings className="h-5 w-5" />
               Set Up Voice Profile
+            </button>
+            <button
+              onClick={() => startTransition(() => router.push('/assistant'))}
+              disabled={isPending}
+              className="inline-flex items-center gap-2 rounded-lg border-2 border-primary bg-transparent px-6 py-3 font-semibold text-primary transition-all hover:bg-primary/10 hover:shadow-md disabled:opacity-60"
+            >
+              <Mic className="h-5 w-5" />
+              Talk to Assistant
             </button>
             <button
               onClick={() => startTransition(() => router.push('/manage-speakers'))}

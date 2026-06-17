@@ -1,0 +1,5 @@
+[Status: ✗  REJECTED — failed pre-screening (insufficient speech)]
+[Detail: Speech ratio 11% < 15% — mostly residual noise/artifacts]
+[RMS: -22.2 dBFS | Speech ratio: 11%]
+
+(stream flagged as noise — Whisper not invoked)

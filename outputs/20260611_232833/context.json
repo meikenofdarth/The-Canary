@@ -1,0 +1,28 @@
+{
+  "timestamp": "2026-06-11T23:28:48.246481",
+  "session_dir": "outputs/20260611_232833",
+  "drs_mode": "A",
+  "scene": {
+    "speaker_count": 1,
+    "complexity": 0.222,
+    "noise_level": 0.739,
+    "simul_speech": 0.0
+  },
+  "speakers": [
+    {
+      "id": "speaker_1",
+      "status": "READY",
+      "transcript": "Hello Canary, my name is Sancho, I have a green scabal in the eye rose, I also have a blue",
+      "wakeword": true,
+      "wakeword_confidence": 1.0,
+      "wakeword_phrase": "hello canary",
+      "type": "COMMAND",
+      "type_confidence": 0.95
+    }
+  ],
+  "wakeword_count": 1,
+  "command_count": 1,
+  "conflict": false,
+  "conflict_pair": null,
+  "route": "EXECUTE"
+}

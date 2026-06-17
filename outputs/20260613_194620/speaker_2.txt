@@ -1,0 +1,8 @@
+[Language: en]
+[Status: ✓  READY — meaningful speech detected]
+[RMS: -25.8 dBFS | Speech ratio: 38%]
+
+So, what is the weather?
+
+--- Segments ---
+[0.00s → 2.60s] So, what is the weather?  [low confidence]

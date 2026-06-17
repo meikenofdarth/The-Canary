@@ -1,0 +1,8 @@
+[Language: hi]
+[Status: ✓  READY — meaningful speech detected]
+[RMS: -29.7 dBFS | Speech ratio: 51%]
+
+jalmas, what is the weather today?
+
+--- Segments ---
+[0.00s → 2.00s] Jalmas, what is the weather today?  [low confidence]

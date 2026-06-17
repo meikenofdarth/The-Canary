@@ -1,0 +1,8 @@
+[Language: hi]
+[Status: ✓  READY — meaningful speech detected]
+[RMS: -25.4 dBFS | Speech ratio: 52%]
+
+arves, what is the benefit today?
+
+--- Segments ---
+[0.00s → 2.00s] Arves, what is the benefit today?  [low confidence]

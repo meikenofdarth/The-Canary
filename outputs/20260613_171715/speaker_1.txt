@@ -1,0 +1,10 @@
+[Language: en]
+[Status: ✓  READY — meaningful speech detected]
+[RMS: -22.0 dBFS | Speech ratio: 57%]
+
+So, there is a brown box in my room, there is something else in my room. Here Raju, turn the lights on. Here Raju, turn on the lights.
+
+--- Segments ---
+[0.00s → 4.12s] So, there is a brown box in my room, there is something else in my room.
+[4.12s → 7.28s] Here Raju, turn the lights on.
+[7.28s → 9.28s] Here Raju, turn on the lights.
