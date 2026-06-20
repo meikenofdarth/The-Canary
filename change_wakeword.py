@@ -1,32 +1,4 @@
 #!/usr/bin/env python3
-"""
-change_wakeword.py  –  The Canary Wakeword Configuration CLI
-=============================================================
-Records a new wake word 2–3 times, transcribes each with Whisper,
-picks the majority-vote word, then calls the C++ Weighted Phonetic
-Engine to build a full phonetic variant table and saves it as
-wakeword/wakeword_config.json.
-
-From that point on, wakeword_detector.py will use the new word instead
-of "Canary". Run --reset to revert to Canary at any time.
-
-Usage
------
-  python3 change_wakeword.py               # interactive: record + enroll
-  python3 change_wakeword.py --reset       # delete config → back to Canary
-  python3 change_wakeword.py --show        # show currently active wakeword
-  python3 change_wakeword.py --build-only <word>  # skip recording, build table for <word>
-  python3 change_wakeword.py --threshold 0.80     # custom similarity threshold
-
-Architecture
-------------
-  1.  VAD-based recording (same _record_smart as add_voicer.py, 1.8s silence)
-  2.  3 recordings → Whisper base → 3 transcriptions
-  3.  Majority vote on single-word extraction
-  4.  C++ binary: ./wakeword/build/wakeword_matcher --build-table <word>
-  5.  Writes: wakeword/wakeword_config.json
-  6.  wakeword_detector.py loads it on next import (zero run_canary.py changes)
-"""
 
 import os
 import sys
@@ -44,11 +16,9 @@ import numpy as np
 import sounddevice as sd
 import soundfile as sf
 
-# ── Silence noisy loggers ────────────────────────────────────────────────────
 logging.getLogger("huggingface_hub").setLevel(logging.ERROR)
 os.environ["HF_HUB_DISABLE_IMPLICIT_TOKEN"] = "1"
 
-# ── Paths ────────────────────────────────────────────────────────────────────
 _ROOT        = Path(__file__).parent
 _WAKEWORD_DIR = _ROOT / "computation" / "wakeword"
 _BINARY      = _WAKEWORD_DIR / "build" / "wakeword_matcher"
@@ -56,19 +26,13 @@ _CONFIG_PATH = _WAKEWORD_DIR / "wakeword_config.json"
 
 SAMPLE_RATE = 16_000
 
-# ─────────────────────────────────────────────────────────────────────────────
-#  Recording constants (identical to add_voicer.py)
-# ─────────────────────────────────────────────────────────────────────────────
 _CALIBRATION_SEC = 0.8
 _SILENCE_TO_STOP = 1.8
-_MIN_SPEECH_SEC  = 1.0   # shorter for a single word
+_MIN_SPEECH_SEC  = 1.0
 _MAX_DURATION    = 15.0
 _FRAME_LEN       = int(SAMPLE_RATE * 0.030)
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-#  Terminal styling
-# ─────────────────────────────────────────────────────────────────────────────
 def _cls():
     os.system("cls" if os.name == "nt" else "clear")
 
@@ -88,14 +52,7 @@ def _err(t):  print(f"  ✗  {t}")
 def _h(t):    print(f"\n  ▶  {t}")
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-#  Smart VAD recording  (verbatim from add_voicer.py)
-# ─────────────────────────────────────────────────────────────────────────────
 def _record_smart(label: str) -> np.ndarray:
-    """
-    VAD-driven smart recording with ENTER-to-stop fallback.
-    Identical mechanism to add_voicer.py — 1.8 s silence auto-stop.
-    """
     print()
     for i in (3, 2, 1):
         print(f"    {i} ...", end="\r", flush=True)
@@ -134,7 +91,6 @@ def _record_smart(label: str) -> np.ndarray:
     kb_thread = threading.Thread(target=_keyboard_watcher, daemon=True)
     kb_thread.start()
 
-    # Calibrate noise floor
     print("  👂  Calibrating ...                                  ",
           end="\r", flush=True)
     time.sleep(_CALIBRATION_SEC)
@@ -222,7 +178,7 @@ def _record_smart(label: str) -> np.ndarray:
     if stop_event.is_set():
         print(f"\n  ⏹  Stopped by ENTER.                              ")
 
-    stop_event.set()  # Signal keyboard watcher thread to exit if VAD auto-stopped
+    stop_event.set()
     stream.stop()
     stream.close()
 
@@ -232,14 +188,7 @@ def _record_smart(label: str) -> np.ndarray:
         return np.concatenate(frames).squeeze().astype(np.float32)
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-#  ASR: transcribe a single word from audio
-# ─────────────────────────────────────────────────────────────────────────────
 def _transcribe_word(audio: np.ndarray) -> str | None:
-    """
-    Run Whisper 'base' on the audio and extract the first clean word.
-    Returns None if transcription fails or is empty.
-    """
     try:
         import whisper
         if not hasattr(whisper, "load_model"):
@@ -262,24 +211,17 @@ def _transcribe_word(audio: np.ndarray) -> str | None:
     if not raw:
         return None
 
-    # Extract words — strip punctuation, lowercase, take first real word
     import re
     words = re.findall(r"[a-zA-Z']+", raw.lower())
-    # Remove filler words
     fillers = {"hey", "hi", "ok", "okay", "oh", "um", "uh", "the", "a", "and"}
     clean = [w for w in words if w not in fillers and len(w) >= 2]
     if not clean:
-        # If all were fillers, just take the first raw word
         clean = words
 
     return clean[0] if clean else None
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-#  C++ binary: build the phonetic variant table
-# ─────────────────────────────────────────────────────────────────────────────
 def _ensure_binary_built() -> bool:
-    """Auto-build the C++ binary if it's not present."""
     if _BINARY.exists():
         return True
 
@@ -305,10 +247,6 @@ def _ensure_binary_built() -> bool:
 
 
 def _build_table(word: str, threshold: float) -> bool:
-    """
-    Call the C++ binary to generate wakeword_config.json.
-    Returns True on success.
-    """
     if not _ensure_binary_built():
         return False
 
@@ -343,15 +281,8 @@ def _build_table(word: str, threshold: float) -> bool:
         return False
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-#  Main enrollment flow
-# ─────────────────────────────────────────────────────────────────────────────
 def run_wakeword_enrollment(n_recordings: int = 3,
                              threshold: float = 0.75) -> None:
-    """
-    Record the wake word 2–3 times, pick majority-vote transcription,
-    build phonetic table, save config.
-    """
     _cls()
     _banner()
     _h("Say your new wake word clearly when prompted.")
@@ -371,14 +302,12 @@ def run_wakeword_enrollment(n_recordings: int = 3,
 
         audio = _record_smart(f"Wake word recording {attempt}")
 
-        # Quality check
         rms_db = 20.0 * np.log10(np.sqrt(np.mean(audio ** 2)) + 1e-10)
         if rms_db < -50.0:
             _warn(f"Recording too quiet ({rms_db:.0f} dBFS). Try again.")
             attempt -= 1
             continue
 
-        # Save temp file
         tmp_path = tmp_dir / f"ww_{attempt}.wav"
         sf.write(str(tmp_path), audio, SAMPLE_RATE, subtype="PCM_16")
 
@@ -390,7 +319,6 @@ def run_wakeword_enrollment(n_recordings: int = 3,
             transcriptions.append(word)
         else:
             _warn("Could not transcribe. Please try again.")
-            # Retry this slot
             if attempt < n_recordings:
                 continue
 
@@ -398,7 +326,6 @@ def run_wakeword_enrollment(n_recordings: int = 3,
         _err("No successful recordings. Aborting.")
         return
 
-    # ── Majority vote ─────────────────────────────────────────────────────
     counts  = Counter(transcriptions)
     winner  = counts.most_common(1)[0][0]
     count_w = counts[winner]
@@ -422,7 +349,6 @@ def run_wakeword_enrollment(n_recordings: int = 3,
         print("  Tip: You can use --reset to clear any custom config.")
         return
 
-    # ── Build phonetic table ──────────────────────────────────────────────
     ok = _build_table(winner, threshold)
     if not ok:
         _err("Failed to build phonetic table. Wake word NOT changed.")
@@ -437,16 +363,11 @@ def run_wakeword_enrollment(n_recordings: int = 3,
     print("  To revert to Canary:  python3 change_wakeword.py --reset")
     print()
 
-    # Cleanup temp recordings
     for f in tmp_dir.glob("ww_*.wav"):
         f.unlink()
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-#  CLI: --show / --reset / --build-only
-# ─────────────────────────────────────────────────────────────────────────────
 def cmd_show() -> None:
-    """Show the currently active wakeword configuration."""
     _banner()
     if not _CONFIG_PATH.exists():
         print("  Active wake word   : canary  (default)")
@@ -467,7 +388,6 @@ def cmd_show() -> None:
 
 
 def cmd_reset() -> None:
-    """Delete custom config → revert to Canary."""
     _banner()
     if _CONFIG_PATH.exists():
         _CONFIG_PATH.unlink()
@@ -479,7 +399,6 @@ def cmd_reset() -> None:
 
 
 def cmd_build_only(word: str, threshold: float) -> None:
-    """Build phonetic table for a word without recording."""
     _banner()
     print(f"  Building table for: '{word}'")
     _rule()
@@ -491,9 +410,6 @@ def cmd_build_only(word: str, threshold: float) -> None:
     print()
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-#  Entry point
-# ─────────────────────────────────────────────────────────────────────────────
 def main():
     parser = argparse.ArgumentParser(
         description="The Canary — Wake Word Configuration CLI",

@@ -1,0 +1,8 @@
+[Language: en]
+[Status: ✓  READY — meaningful speech detected]
+[RMS: -25.2 dBFS | Speech ratio: 35%]
+
+canary, what is the weather in my city?
+
+--- Segments ---
+[1.75s → 8.75s] Canary, what is the weather in my city?

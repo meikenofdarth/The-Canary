@@ -1,8 +1,0 @@
-[Language: en]
-[Status: ✓  READY — meaningful speech detected]
-[RMS: -23.9 dBFS | Speech ratio: 39%]
-
-jarvis plays some songs of mine.
-
---- Segments ---
-[0.00s → 4.00s] Jarvis plays some songs of mine.

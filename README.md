@@ -20,7 +20,7 @@ To adapt the assistant pipeline to noisy household environments, the following o
 
 3. Speech-Band Filtering for 3-Speaker Mode
 - Problem: Evaluating 3-speaker mixtures often created ghost streams containing only artifacts.
-- Solution: Modified the 3-speaker mode to run the high-accuracy 2-speaker SepFormer-libri2mix model internally. It filters output streams based on their speech-band RMS energy (300 Hz to 3400 Hz), discarding streams that fall below 25% of the loudest stream. If only one real speaker stream remains, the pipeline automatically down-routes to the single-speaker path. Terminal prints and dummy imports referencing Libri3mix are maintained for compatibility.
+- Solution: Modified the 3-speaker mode to run the high-accuracy 2-speaker ConvTasNet (Libri2Mix) model internally. It filters output streams based on their speech-band RMS energy (300 Hz to 3400 Hz), discarding streams that fall below 25% of the loudest stream. If only one real speaker stream remains, the pipeline automatically down-routes to the single-speaker path.
 
 4. Voiced Segment Extraction for Voice ID
 - Problem: Running similarity matching on entire files contaminated voice profiles with silent gaps and room noise.
@@ -60,7 +60,7 @@ The-Canary/
 │   ├── __init__.py              # Module initialization
 │   ├── denoiser.py              # Non-stationary spectral noise reduction
 │   ├── speaker_counter.py       # Sliding-window clustering feature extractor
-│   ├── separator.py             # SepFormer source separation wrapper
+│   ├── separator.py             # ConvTasNet source separation wrapper
 │   ├── metrics.py               # Audio metrics (SI-SNR, RMS, SNR, leakage)
 │   └── pipeline.py              # Core orchestrator class
 ├── asr/                         # Speech-to-text module
@@ -84,7 +84,7 @@ The-Canary/
 
 * Denoiser (denoiser.py): Wraps the noisereduce library. It estimates noise profiles dynamically and applies spectral gating under a non-stationary assumption. This removes environmental noises (such as fans, HVAC hum, and room reverb) while preserving speech. It automatically scales and caps signal peaks to 0.98 to prevent clipping.
 * Speaker Count Estimator (speaker_counter.py): Slides a 500ms window (50% overlap) across the audio signal. It extracts a 6-dimensional acoustic feature vector (log energy, zero-crossing rate, spectral centroid, spectral bandwidth, spectral rolloff, log flatness) for each voiced frame. These features are standardized and clustered using a greedy agglomerative clustering method across multiple distance thresholds. The median number of clusters represents the estimated speaker count (1 to 3).
-* Speaker Separator (separator.py): Integrates SpeechBrain's pretrained SepFormer model. When 2 speakers are estimated, it loads speechbrain/sepformer-libri2mix. For 3 speakers, it loads speechbrain/sepformer-libri3mix. The models downsample the audio to 8000 Hz, execute blind source separation, upsample the separated streams back to 16000 Hz, and pad/trim them to align with the original input duration. In 3-speaker mode, it automatically discards any stream whose speech-band RMS is less than 25% of the loudest stream to filter out neural artifacts (ghost speakers).
+* Speaker Separator (separator.py): Integrates Asteroid's pretrained ConvTasNet model (JorisCos/ConvTasNet_Libri2Mix_sepnoisy_16k, ~5.07M params). It runs at 16000 Hz, executes blind source separation, and pads/trims the separated streams to align with the original input duration. In 3-speaker mode, it automatically discards any stream whose speech-band RMS is less than 25% of the loudest stream to filter out neural artifacts (ghost speakers).
 * Metrics (metrics.py): Provides evaluation algorithms:
     * SI-SNR (Scale-Invariant Signal-to-Noise Ratio): Evaluates separation quality.
     * SNR: Computes classical Signal-to-Noise Ratio.
@@ -157,7 +157,7 @@ python run_canary.py
 1. The script initializes the audio stream and prompts you to speak.
 2. It records microphone audio until a 1.8-second silence timeout is hit, saving the buffer as raw_input.wav in a timestamped subdirectory under outputs/.
 3. It estimates the speaker count.
-4. If multiple speakers are detected, it separates the mixture using SepFormer, suppresses cross-talk, and saves individual files (speaker_1.wav, speaker_2.wav, etc.).
+4. If multiple speakers are detected, it separates the mixture using ConvTasNet, suppresses cross-talk, and saves individual files (speaker_1.wav, speaker_2.wav, etc.).
 5. It runs the pre-screening quality checks. If passed, it loads Whisper and transcribes the audio to text, saving transcripts as .txt files.
 6. It performs DRS shadow analysis and invokes the Context Engine.
 7. The Context Engine evaluates wake words and intents, prints a structured ASCII summary to the terminal, and saves context.json.

@@ -1,0 +1,28 @@
+# The Canary — full stack: backend API + web UI.
+#   docker compose up --build
+# API  → http://localhost:8000   Web → http://localhost:3000
+services:
+  api:
+    build: .
+    image: canary-api
+    ports:
+      - "8000:8000"
+    environment:
+      - CANARY_ASR_MODEL=tiny
+    volumes:
+      # Persist enrolled users + voice profiles across container restarts.
+      - ./database:/app/database
+    restart: unless-stopped
+
+  web:
+    build:
+      context: ./frontend/web
+      args:
+        # Browser runs on the host, so it reaches the API via the mapped port.
+        NEXT_PUBLIC_CANARY_API: http://localhost:8000
+    image: canary-web
+    ports:
+      - "3000:3000"
+    depends_on:
+      - api
+    restart: unless-stopped

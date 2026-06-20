@@ -1,22 +1,3 @@
-"""
-tests/build_fixtures.py
-=======================
-Generate deterministic test fixtures for the acoustic pipeline.
-
-We need *ground-truth references* to measure SI-SNR objectively. Real
-recordings don't have clean per-speaker references, so we synthesize a
-2-speaker overlapping mixture from two clean single-speaker clips that the
-project already ships. The clean clips become the references; their sum is
-the mixture fed to the separator.
-
-Outputs (into data/test_audio/):
-    ref_a.wav   — clean speaker A (16 kHz mono)
-    ref_b.wav   — clean speaker B (16 kHz mono)
-    mix.wav     — A + B overlapping mixture (16 kHz mono)
-
-Run:
-    python tests/build_fixtures.py
-"""
 
 from __future__ import annotations
 
@@ -29,7 +10,6 @@ ROOT = Path(__file__).resolve().parent.parent
 OUT = ROOT / "data" / "test_audio"
 SR = 16_000
 
-# Two clean single-speaker clips shipped with the repo.
 SRC_A = ROOT / "models" / "speaker_embeddings" / "hemang.wav"
 SRC_B = ROOT / "models" / "speaker_embeddings" / "sanchit.wav"
 
@@ -53,7 +33,6 @@ def main() -> None:
     n = min(len(a), len(b))
     a, b = a[:n], b[:n]
 
-    # Overlapping mixture, scaled to avoid clipping.
     mix = a + b
     peak = float(np.max(np.abs(mix))) + 1e-9
     scale = 0.9 / peak if peak > 0.9 else 1.0

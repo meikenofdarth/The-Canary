@@ -1,31 +1,9 @@
-"""
-context_engine/utterance_analyzer.py
-======================================
-Rule-based utterance classifier.  Zero ML models — regex + heuristics.
-
-Covers every common household scenario across 15 domains:
-  Media · Lighting · Climate · Security · Appliances · Entertainment ·
-  Communication · Shopping · Timers · Navigation · Smart Home Routines ·
-  Search/Information · Volume/Brightness · Open/Close · Health
-
-Output types:
-    COMMAND      — imperative action directed at the assistant
-    QUESTION     — request for information (interrogative form)
-    CONVERSATION — social / ambient speech not directed at Canary
-    UNKNOWN      — too short / ambiguous to classify
-"""
 
 from __future__ import annotations
 import re
 
-# ─────────────────────────────────────────────────────────────────────────────
-#  COMMAND PATTERNS
-#  Each pattern is a regex that fires on COMMAND utterances.
-#  Ordered by domain for maintainability.
-# ─────────────────────────────────────────────────────────────────────────────
 _COMMAND_RE_STRINGS: list[str] = [
 
-    # ── Media control ─────────────────────────────────────────────────────
     r"\bplay\b",
     r"\bpause\b",
     r"\bstop\b",
@@ -44,7 +22,6 @@ _COMMAND_RE_STRINGS: list[str] = [
     r"\brewind\b",
     r"\bstart\s+(the\s+)?music\b",
 
-    # ── Power / switches ──────────────────────────────────────────────────
     r"\bturn\s+(it\s+)?(on|off)\b",
     r"\bswitch\s+(it\s+)?(on|off)\b",
     r"\bpower\s+(it\s+)?(on|off)\b",
@@ -53,11 +30,10 @@ _COMMAND_RE_STRINGS: list[str] = [
     r"\bactivate\b",
     r"\bdeactivate\b",
 
-    # ── Lighting ──────────────────────────────────────────────────────────
     r"\bdim\b",
     r"\bbrighten\b",
     r"\bturn\s+(on|off)\s+(the\s+)?lights?\b",
-    r"\blights?\s+off\b",   # "lights off" alone is a command; "lights on?" is a question
+    r"\blights?\s+off\b",
     r"\b(turn|switch|put)\s+(on|off)\s+(the\s+)?lights?\b",
     r"\bset\s+(the\s+)?(lights?|brightness|lamp)\b",
     r"\bchange\s+(the\s+)?(lights?|color|bulb)\b",
@@ -65,7 +41,6 @@ _COMMAND_RE_STRINGS: list[str] = [
     r"\bset\s+(the\s+)?color\b",
     r"\bcolou?r\s+the\s+lights?\b",
 
-    # ── Climate / HVAC ────────────────────────────────────────────────────
     r"\bset\s+(the\s+)?(thermostat|temperature|ac|air\s+conditioning|heater|heat|fan|humidity)\b",
     r"\bmake\s+it\s+(warmer|cooler|hotter|colder)\b",
     r"\bturn\s+(on|off)\s+(the\s+)?(ac|air\s+conditioning|heater|heat|fan|radiator|humidifier|dehumidifier)\b",
@@ -75,7 +50,6 @@ _COMMAND_RE_STRINGS: list[str] = [
     r"\bset\s+.{1,30}\s+degrees?\b",
     r"\b(warmer|cooler)\s+in\s+here\b",
 
-    # ── Security / Locks ──────────────────────────────────────────────────
     r"\block\s+(the\s+)?(door|house|home|garage|front|back|bedroom|car)\b",
     r"\bunlock\s+(the\s+)?(door|house|home|garage|front|back|bedroom|car)\b",
     r"\barm\s+(the\s+)?(alarm|security|system)\b",
@@ -85,7 +59,6 @@ _COMMAND_RE_STRINGS: list[str] = [
     r"\bsecure\s+(the\s+)?(house|home|property|perimeter)\b",
     r"\bopen\s+(the\s+)?(gate|garage\s+door|front\s+door|security\s+door)\b",
 
-    # ── Appliances ────────────────────────────────────────────────────────
     r"\bstart\s+(the\s+)?(washer|dryer|dishwasher|oven|microwave|coffee\s+maker|robot|roomba|vacuum|blender)\b",
     r"\bstop\s+(the\s+)?(washer|dryer|dishwasher|oven|microwave|coffee\s+maker|robot|roomba|vacuum)\b",
     r"\bturn\s+(on|off)\s+(the\s+)?(washer|dryer|dishwasher|oven|microwave|coffee\s+maker|tv|television|laptop|computer|printer|iron|kettle)\b",
@@ -95,7 +68,6 @@ _COMMAND_RE_STRINGS: list[str] = [
     r"\bboil\s+(some\s+)?water\b",
     r"\bmicrowave\s+(for\s+)?\d+\s+(seconds?|minutes?)\b",
 
-    # ── Entertainment / Streaming ─────────────────────────────────────────
     r"\bput\s+on\s+(a\s+)?(movie|show|episode|series)\b",
     r"\bwatch\b",
     r"\bstream\b",
@@ -104,11 +76,8 @@ _COMMAND_RE_STRINGS: list[str] = [
     r"\bsearch\s+(netflix|youtube|spotify)\s+for\b",
     r"\bfind\s+(a\s+)?(movie|show|song|playlist|artist|album|documentary)\b",
 
-    # ── Communication ─────────────────────────────────────────────────────────
-    # "call" pattern: must not be a question like "Did anyone call me?"
-    # Require it appears at the START or after a wakeword/imperative trigger.
     r"\bcall\s+(mom|dad|home|work|office|\w+\s+at|my\s+\w+)\b",
-    r"\b(call|dial)\s+\d",               # call 911, dial 555...
+    r"\b(call|dial)\s+\d",
     r"\bplace\s+a\s+(call|phone\s+call)\b",
     r"\bdial\b",
     r"\btext\b",
@@ -121,7 +90,6 @@ _COMMAND_RE_STRINGS: list[str] = [
     r"\bfaceTime\b",
     r"\bwhatsapp\b",
 
-    # ── Shopping / Lists ──────────────────────────────────────────────────
     r"\border\s+(a|an|some|food|pizza|groceries|takeaway|takeout|delivery)\b",
     r"\border\s+from\b",
     r"\bbuy\s+(a|an|some|more)\b",
@@ -133,7 +101,6 @@ _COMMAND_RE_STRINGS: list[str] = [
     r"\bcheck\s+out\b",
     r"\badd\s+to\s+(my\s+)?cart\b",
 
-    # ── Timers / Reminders / Alarms ───────────────────────────────────────
     r"\bset\s+(a\s+)?(timer|alarm|countdown|reminder)\b",
     r"\bremind\s+me\b",
     r"\bwake\s+me\s+up\b",
@@ -144,7 +111,6 @@ _COMMAND_RE_STRINGS: list[str] = [
     r"\bstop\s+(the\s+)?timer\b",
     r"\bset\s+(an?\s+)?alarm\s+for\b",
 
-    # ── Navigation ────────────────────────────────────────────────────────
     r"\bnavigate\s+to\b",
     r"\bdirections?\s+to\b",
     r"\btake\s+me\s+to\b",
@@ -154,7 +120,6 @@ _COMMAND_RE_STRINGS: list[str] = [
     r"\bstart\s+(the\s+)?navigation\b",
     r"\bcheck\s+(traffic|commute|route)\b",
 
-    # ── Explicit info / search commands ───────────────────────────────────
     r"\blook\s+up\b",
     r"\bshow\s+me\b",
     r"\btell\s+me\b",
@@ -165,7 +130,6 @@ _COMMAND_RE_STRINGS: list[str] = [
     r"\bconvert\b",
     r"\bcalculate\b",
 
-    # ── Volume / Brightness / Intensity ───────────────────────────────────
     r"\bincrease\b",
     r"\bdecrease\b",
     r"\bturn\s+it\s+(up|down)\b",
@@ -173,14 +137,12 @@ _COMMAND_RE_STRINGS: list[str] = [
     r"\bmin(imum)?\s+(volume|brightness|speed)\b",
     r"\bfull\s+volume\b",
 
-    # ── Open / Close / Doors / Curtains ───────────────────────────────────
     r"\bopen\s+(the\s+)?(door|garage|window|app|curtains?|blinds?|shutters?|sunroof)\b",
     r"\bclose\s+(the\s+)?(door|garage|window|app|curtains?|blinds?|shutters?)\b",
     r"\bshut\s+(the\s+)?(door|window|curtains?|blinds?|garage)\b",
     r"\bdraw\s+(the\s+)?curtains?\b",
     r"\broll\s+(up|down)\s+(the\s+)?blinds?\b",
 
-    # ── Smart Home Modes / Scenes ─────────────────────────────────────────
     r"\bgood\s+morning\s+(mode|routine|scene)?\b",
     r"\bbedtime\s+(mode|routine|scene)?\b",
     r"\bleave\s+(home|house)\s+(mode|scene)?\b",
@@ -198,17 +160,14 @@ _COMMAND_RE_STRINGS: list[str] = [
     r"\bevening\s+(routine|scene)\b",
     r"\bwake\s+up\s+(mode|routine)\b",
 
-    # ── Health / Wellness ─────────────────────────────────────────────────
     r"\bstart\s+(a\s+)?(workout|meditation|yoga|exercise|run|walk)\b",
     r"\btrack\s+(my\s+)?(steps|calories|sleep|heart\s+rate|weight|water)\b",
     r"\blog\s+(my\s+)?(meal|calories|workout|medicine)\b",
     r"\btake\s+(my\s+)?(medicine|medication|pills?|vitamins?)\b",
 
-    # ── Raise / Lower (generic direction) ─────────────────────────────────
     r"\braise\b",
     r"\blower\b",
 
-    # ── Attention Control / Speaker Override ──────────────────────────────
     r"\blisten\s+to\s+(me|my\s+voice)\b",
     r"\b(is\s+)?sen[td]\s+to\s+me\b",
     r"\blisten(ed|ing)?\s+to\s+me\b",
@@ -223,16 +182,11 @@ _COMMAND_RE_STRINGS: list[str] = [
     r"\boverride\b",
 ]
 
-# ─────────────────────────────────────────────────────────────────────────────
-#  QUESTION STARTERS
-# ─────────────────────────────────────────────────────────────────────────────
 _WH_WORDS: frozenset[str] = frozenset({
     "what", "where", "when", "who", "whom", "why", "how",
     "which", "whose", "whatever", "wherever", "whenever",
 })
 
-# Auxiliary-verb inversions: "Is the door locked?", "Can you play..."
-# Stored as EXACT FIRST WORDS (not prefixes) — avoids "cannery" matching "can".
 _AUX_FIRST_WORDS: frozenset[str] = frozenset({
     "is", "are", "was", "were", "will", "would", "could", "should",
     "can", "do", "does", "did", "has", "have", "had", "am",
@@ -241,25 +195,12 @@ _AUX_FIRST_WORDS: frozenset[str] = frozenset({
     "hasn't", "haven't",
 })
 
-# ─────────────────────────────────────────────────────────────────────────────
-#  COMPILE PATTERNS ONCE AT IMPORT
-# ─────────────────────────────────────────────────────────────────────────────
 _COMPILED_CMDS: list[re.Pattern] = [
     re.compile(p, re.IGNORECASE) for p in _COMMAND_RE_STRINGS
 ]
 
 
 def analyze_utterance(text: str) -> dict:
-    """
-    Classify an utterance into COMMAND / QUESTION / CONVERSATION / UNKNOWN.
-
-    Returns
-    -------
-    {
-        "type":       "COMMAND" | "QUESTION" | "CONVERSATION" | "UNKNOWN",
-        "confidence": float    # 0.0 – 1.0
-    }
-    """
     text = text.strip()
     if not text:
         return {"type": "UNKNOWN", "confidence": 0.0}
@@ -267,28 +208,20 @@ def analyze_utterance(text: str) -> dict:
     lower      = text.lower()
     first_word = lower.split()[0].rstrip("',?!")
 
-    # ── COMMAND check ─────────────────────────────────────────────────────
     for pat in _COMPILED_CMDS:
         if pat.search(lower):
             return {"type": "COMMAND", "confidence": 0.95}
 
-    # ── QUESTION check ────────────────────────────────────────────────────
-    # (a) WH-word opening  ("What's the weather?", "How long until...")
     if first_word in _WH_WORDS:
         return {"type": "QUESTION", "confidence": 0.90}
 
-    # (b) Auxiliary-verb inversion  ("Is it raining?", "Can you...")
-    #     Uses word-level set lookup so "cannery" does NOT match "can".
     if first_word in _AUX_FIRST_WORDS:
         return {"type": "QUESTION", "confidence": 0.85}
 
-    # (c) Any sentence ending with "?" is treated as a question
     if text.rstrip().endswith("?"):
         return {"type": "QUESTION", "confidence": 0.80}
 
-    # ── CONVERSATION ──────────────────────────────────────────────────────
     if len(text.split()) >= 2:
         return {"type": "CONVERSATION", "confidence": 0.75}
 
-    # ── UNKNOWN (too short / single-word ambiguity) ───────────────────────
     return {"type": "UNKNOWN", "confidence": 0.40}

@@ -1,21 +1,7 @@
-"""
-computation/audio/transcribe.py
----------------------------------
-Whisper-based speech-to-text for The Canary pipeline.
-
-Pre-screening gate (runs BEFORE Whisper, very fast):
-  Test 1: RMS energy        — is there enough signal?
-  Test 2: Energy-based VAD  — is enough of it actually speech?
-
-Post-transcription gate (runs AFTER Whisper, checks quality):
-  Test 3: avg_logprob       — did Whisper actually understand it?
-  Test 4: repetition check  — is it a hallucination loop?
-
-Only streams that pass ALL gates are transcribed and flagged READY.
-"""
 
 from __future__ import annotations
 
+import os
 import zlib
 import warnings
 import logging
@@ -29,37 +15,23 @@ logging.getLogger("whisper").setLevel(logging.ERROR)
 
 _model_cache: dict = {}
 
+_DEFAULT_MODEL = os.environ.get("CANARY_ASR_MODEL", "tiny")
 
-# ─────────────────────────────────────────────────────────────────────────────
-#  MODEL LOADER
-# ─────────────────────────────────────────────────────────────────────────────
-def _load_model(model_name: str = "base"):
+_INITIAL_PROMPT = (
+    "Smart home voice assistant transcript. Wake words: canary, jarvis. "
+    "Common commands: what is the weather in my city, what's the time, "
+    "play some music, set a timer, turn on the lights, what's the news today. "
+    "Speakers: Hemang, Deepkumar, Sanchit. Use clear punctuation."
+)
+
+
+def _load_model(model_name: str = _DEFAULT_MODEL):
     if model_name not in _model_cache:
-        try:
-            import whisper
-            if not hasattr(whisper, "load_model"):
-                raise ImportError("The wrong 'whisper' package is installed.")
-        except (ImportError, AttributeError) as e:
-            print("\n" + "="*80)
-            print("ERROR: The wrong 'whisper' package is installed on this system.")
-            print("Please run the following commands to install the correct package:")
-            print("  pip uninstall -y whisper")
-            print("  pip install openai-whisper")
-            print("="*80 + "\n")
-            raise ImportError(
-                "Whisper package mismatch. Run 'pip uninstall whisper' and 'pip install openai-whisper'."
-            ) from e
-
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            print(f"    [ASR] Loading Whisper {model_name} ...")
-            _model_cache[model_name] = whisper.load_model(model_name)
+        import whisper
+        _model_cache[model_name] = whisper.load_model(model_name)
     return _model_cache[model_name]
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-#  TEST 1 + 2 — PRE-SCREENING GATE  (no model needed, runs in <0.1s)
-# ─────────────────────────────────────────────────────────────────────────────
 def pre_screen(
     wav_path: str | Path,
     rms_threshold_db: float   = -52.0,
@@ -115,9 +87,6 @@ def pre_screen(
     }
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-#  TEST 3 + 4 — POST-WHISPER QUALITY GATE
-# ─────────────────────────────────────────────────────────────────────────────
 def _is_repetitive(text: str, repeat_threshold: int = 4) -> bool:
     words = text.split()
     if len(words) < 10:
@@ -164,13 +133,10 @@ def classify_speech(result: dict, has_vad_speech: bool = False) -> str:
     return "SPEECH"
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-#  CORE TRANSCRIBE
-# ─────────────────────────────────────────────────────────────────────────────
 def transcribe(
     wav_path: str | Path,
-    model_name: str = "base",
-    language: Optional[str] = None,
+    model_name: str = _DEFAULT_MODEL,
+    language: Optional[str] = "en",
     has_vad_speech: bool = False,
 ) -> dict:
     wav_path = Path(wav_path)
@@ -192,29 +158,33 @@ def transcribe(
             audio_np,
             language=language,
             task="transcribe",
-            fp16=False,
-            verbose=False,
+            beam_size=5,
+            best_of=5,
             temperature=(0.0, 0.2, 0.4, 0.6, 0.8, 1.0),
-            compression_ratio_threshold=1.8,
-            logprob_threshold=-1.2,
+            compression_ratio_threshold=2.4,
+            logprob_threshold=-1.0,
             no_speech_threshold=0.5,
             condition_on_previous_text=False,
+            initial_prompt=_INITIAL_PROMPT,
+            verbose=False,
+            fp16=False,
         )
 
-    segments = [
-        {
-            "start":          round(seg["start"], 2),
-            "end":            round(seg["end"],   2),
-            "text":           seg["text"].strip(),
+    segments = []
+    text_parts = []
+    for seg in result.get("segments", []):
+        segments.append({
+            "start":          round(seg.get("start", 0.0), 2),
+            "end":            round(seg.get("end", 0.0), 2),
+            "text":           seg.get("text", "").strip(),
             "no_speech_prob": round(seg.get("no_speech_prob", 0.0), 3),
             "avg_logprob":    round(seg.get("avg_logprob", -0.5), 3),
-        }
-        for seg in result.get("segments", [])
-    ]
+        })
+        text_parts.append(seg.get("text", ""))
 
     raw = {
-        "text":     result["text"].strip(),
-        "language": result.get("language", "unknown"),
+        "text":     (result.get("text", "") or " ".join(text_parts)).strip(),
+        "language": result.get("language", language or "unknown"),
         "segments": segments,
     }
     raw["status"] = classify_speech(raw, has_vad_speech=has_vad_speech)
@@ -225,9 +195,6 @@ def transcribe(
     return raw
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-#  SAVE TO .TXT
-# ─────────────────────────────────────────────────────────────────────────────
 _STATUS_LABELS = {
     "SPEECH":         "✓  READY — meaningful speech detected",
     "NO_SPEECH":      "✗  REJECTED — no speech (silence)",
@@ -240,8 +207,8 @@ _STATUS_LABELS = {
 
 def transcribe_and_save(
     wav_path: str | Path,
-    model_name: str = "base",
-    language: Optional[str] = None,
+    model_name: str = _DEFAULT_MODEL,
+    language: Optional[str] = "en",
 ) -> tuple[str, str]:
     wav_path = Path(wav_path)
     txt_path = wav_path.with_suffix(".txt")
@@ -261,9 +228,6 @@ def transcribe_and_save(
 
     result = transcribe(wav_path, model_name=model_name, language=language)
     status = result["status"]
-    # Normalise transcript to lowercase — wakeword detection, intent engine,
-    # and conflict detector all work on lowercased text. Lowercase here once
-    # so every downstream consumer gets consistent casing.
     text   = result["text"].lower() if result["text"] else result["text"]
     label  = _STATUS_LABELS.get(status, status)
 

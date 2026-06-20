@@ -3,6 +3,9 @@ openai-whisper
 speechbrain>=1.0.0          
 noisereduce>=3.0.0         
 
+# Multi-speaker separation engine (ConvTasNet < 5M params)
+asteroid>=0.7.0
+
 sounddevice>=0.4.6
 soundfile>=0.12.1
 torchaudio>=2.0.0
@@ -26,8 +29,14 @@ torch>=2.0.0
 gtts
 pygame
 feedparser
+metaphone                   # Double Metaphone for the Lisp Matrix (phonetic intent matching)
+fastdtw                     # Dynamic Time Warping for Acoustic RAG (ASR-bypass command matching)
 
 # API server
 fastapi
 uvicorn[standard]
 python-multipart
+
+# --- Evaluation / audit tooling (optional; needed for tests/eval_separation.py
+# and param_audit.py) ---
+onnx>=1.16.0

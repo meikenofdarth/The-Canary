@@ -1,32 +1,3 @@
-"""
-separation-filtering/vad_segmenter.py
-=======================================
-Silero VAD-based recording and speech segmentation.
-
-This is the architectural replacement for the fixed 7-second `record()` function.
-It mirrors what Alexa, Siri, and Google Assistant do:
-
-  1.  Stream microphone audio continuously.
-  2.  Feed each 32ms frame to Silero VAD (lightweight, on-device).
-  3.  Stop recording when trailing silence exceeds `silence_timeout` seconds
-      (or `max_duration` hard limit is hit).
-  4.  Run Silero VAD over the complete buffer to produce speech-segment timestamps
-      with millisecond precision.
-
-Public API
-----------
-  record_until_silence(max_duration, silence_timeout, sr) -> np.ndarray
-      Live microphone recording that stops on silence.
-
-  get_vad_segments(audio, sr, ...) -> list[dict]
-      Runs Silero VAD on a buffer and returns speech segment timestamps.
-      Each dict:
-          start_s       — segment start (seconds)
-          end_s         — segment end   (seconds)
-          start_sample  — start in samples
-          end_sample    — end in samples
-          duration_s    — segment length (seconds)
-"""
 
 from __future__ import annotations
 
@@ -35,37 +6,34 @@ import threading
 
 import numpy as np
 
-# ─────────────────────────────────────────────────────────────────────────────
-#  Constants
-# ─────────────────────────────────────────────────────────────────────────────
 
-# Silero VAD requires EXACTLY 512 samples per inference call at 16 kHz
-# (= 32 ms frame).  Do not change this unless also resampling to 8 kHz.
 _SILERO_CHUNK = 512
 
-# VAD probability above this → speech; below → silence
 _VAD_THRESHOLD = 0.40
 
-# Minimum speech segment to keep (ms) — very short bursts are noise
 _MIN_SPEECH_MS = 250
 
-# Silence gap smaller than this merges adjacent segments (ms)
 _MIN_SILENCE_MS = 400
 
-# Each kept segment is padded by this many ms on both sides (avoid clipping)
 _SPEECH_PAD_MS = 120
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-#  Model loader (cached — loaded once per process)
-# ─────────────────────────────────────────────────────────────────────────────
+_VAD_PROFILES: dict[str, dict] = {
+    "default":   {"silence_timeout": 1.8, "min_silence_ms": 400,  "threshold": 0.40, "max_duration": 15.0},
+    "disfluent": {"silence_timeout": 2.5, "min_silence_ms": 1200, "threshold": 0.35, "max_duration": 22.0},
+    "stutter":   {"silence_timeout": 3.0, "min_silence_ms": 1800, "threshold": 0.35, "max_duration": 25.0},
+}
+
+
+def adaptive_vad_config(profile: str = "default") -> dict:
+    return dict(_VAD_PROFILES.get(profile, _VAD_PROFILES["default"]))
+
 
 _vad_model = None
 _vad_lock   = threading.Lock()
 
 
 def _get_vad_model():
-    """Load Silero VAD model once and cache it."""
     global _vad_model
     if _vad_model is None:
         with _vad_lock:
@@ -75,59 +43,39 @@ def _get_vad_model():
     return _vad_model
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-#  Stop-on-silence recorder
-# ─────────────────────────────────────────────────────────────────────────────
-
 def record_until_silence(
-    max_duration:    float = 15.0,
-    silence_timeout: float = 2.5,
+    max_duration:    float | None = None,
+    silence_timeout: float | None = None,
     sr:              int   = 16_000,
+    profile:         str   = "default",
 ) -> np.ndarray:
-    """
-    Record microphone audio until silence or timeout — exactly how
-    Alexa and Siri do it.
-
-    Parameters
-    ----------
-    max_duration    : Hard upper limit (seconds).  Recording always stops here.
-    silence_timeout : Seconds of consecutive non-speech that trigger stop.
-                      Only active AFTER the first speech is detected —
-                      so pre-speech silence (e.g. walking to the mic) is ignored.
-    sr              : Sample rate.  Must be 16000 for Silero VAD.
-
-    Returns
-    -------
-    np.ndarray  — float32 mono audio at `sr`.
-
-    Terminal output
-    ---------------
-    ● Listening — speak now  (auto-stops after Xs silence | max Ys)
-      ● 1.2s          ← while speech detected
-      ○ silence 0.4s  ← while silent after first speech
-      Recording stopped — silence detected (2.5s).
-    """
     import sounddevice as sd
     import torch
 
+    cfg = adaptive_vad_config(profile)
+    if max_duration is None:
+        max_duration = cfg["max_duration"]
+    if silence_timeout is None:
+        silence_timeout = cfg["silence_timeout"]
+
     model = _get_vad_model()
-    model.reset_states()   # clear LSTM hidden state from any previous call
+    model.reset_states()
 
     audio_q:   queue.Queue = queue.Queue()
     frames_all: list       = []
     stop_evt               = threading.Event()
 
     def _sd_callback(indata, frames, time_info, status):
-        audio_q.put(indata[:, 0].copy())   # keep mono
+        audio_q.put(indata[:, 0].copy())
 
     print(
         f"\n● Listening — speak now  "
         f"(auto-stops after {silence_timeout:.1f}s silence | max {max_duration:.0f}s max)"
     )
 
-    vad_buf             = np.zeros(0, dtype=np.float32)  # accumulate until _SILERO_CHUNK
+    vad_buf             = np.zeros(0, dtype=np.float32)
     speech_started      = False
-    consecutive_silent  = 0    # samples of silence seen after first speech
+    consecutive_silent  = 0
     total_samples       = 0
     max_samples         = int(max_duration * sr)
     silence_threshold   = int(silence_timeout * sr)
@@ -136,7 +84,7 @@ def record_until_silence(
         samplerate = sr,
         channels   = 1,
         dtype      = "float32",
-        blocksize  = _SILERO_CHUNK,   # sounddevice delivers _SILERO_CHUNK frames per callback
+        blocksize  = _SILERO_CHUNK,
         callback   = _sd_callback,
     ):
         while not stop_evt.is_set():
@@ -149,7 +97,6 @@ def record_until_silence(
             vad_buf       = np.concatenate([vad_buf, chunk])
             total_samples += len(chunk)
 
-            # Process every complete _SILERO_CHUNK frame through the VAD
             while len(vad_buf) >= _SILERO_CHUNK:
                 frame   = vad_buf[:_SILERO_CHUNK]
                 vad_buf = vad_buf[_SILERO_CHUNK:]
@@ -171,7 +118,6 @@ def record_until_silence(
                             end="\r", flush=True
                         )
 
-                # ── Stop conditions ───────────────────────────────────────
                 if speech_started and consecutive_silent >= silence_threshold:
                     print(
                         f"\n  Recording stopped — silence detected "
@@ -194,44 +140,21 @@ def record_until_silence(
     return np.concatenate(frames_all).astype(np.float32)
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-#  VAD segmenter — run on a complete buffer
-# ─────────────────────────────────────────────────────────────────────────────
-
 def get_vad_segments(
     audio:          np.ndarray,
     sr:             int   = 16_000,
-    threshold:      float = _VAD_THRESHOLD,
+    threshold:      float | None = None,
     min_speech_ms:  int   = _MIN_SPEECH_MS,
-    min_silence_ms: int   = _MIN_SILENCE_MS,
+    min_silence_ms: int | None = None,
     pad_ms:         int   = _SPEECH_PAD_MS,
+    profile:        str   = "default",
 ) -> list[dict]:
-    """
-    Run Silero VAD over `audio` and return a list of speech segments.
+    cfg = adaptive_vad_config(profile)
+    if threshold is None:
+        threshold = cfg["threshold"]
+    if min_silence_ms is None:
+        min_silence_ms = cfg["min_silence_ms"]
 
-    Parameters
-    ----------
-    audio          : float32 mono audio at `sr`.
-    sr             : Sample rate (must be 16000).
-    threshold      : VAD speech probability threshold (0–1).
-    min_speech_ms  : Discard segments shorter than this (ms).
-    min_silence_ms : Merge segments with gaps shorter than this (ms).
-    pad_ms         : Add this many ms of context to each segment boundary.
-
-    Returns
-    -------
-    list[dict]  — sorted by start time, each dict has:
-        start_s       — start time (seconds)
-        end_s         — end   time (seconds)
-        start_sample  — start in samples (clipped to audio bounds)
-        end_sample    — end   in samples (clipped to audio bounds)
-        duration_s    — segment length   (seconds)
-
-    Notes
-    -----
-    If no speech is found, returns a single segment spanning the full audio.
-    This prevents downstream code from processing an empty segment list.
-    """
     import torch
     from silero_vad import get_speech_timestamps
 
@@ -247,10 +170,9 @@ def get_vad_segments(
         min_speech_duration_ms  = min_speech_ms,
         min_silence_duration_ms = min_silence_ms,
         speech_pad_ms       = pad_ms,
-        return_seconds      = False,    # we get samples; convert ourselves
+        return_seconds      = False,
     )
 
-    # ── Fallback: no speech found → single full-audio segment ────────────────
     if not raw_ts:
         total = len(audio)
         return [{
@@ -261,7 +183,6 @@ def get_vad_segments(
             "duration_s":   round(total / sr, 3),
         }]
 
-    # ── Convert + clip to audio length ───────────────────────────────────────
     segments = []
     n = len(audio)
     for ts in raw_ts:
@@ -281,12 +202,7 @@ def get_vad_segments(
     return segments
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-#  Pretty-print for terminal
-# ─────────────────────────────────────────────────────────────────────────────
-
 def print_segments(segments: list[dict]) -> None:
-    """Print segment timestamps to terminal."""
     print(f"  Found {len(segments)} speech segment(s):")
     for i, seg in enumerate(segments, 1):
         bar = "─" * max(1, int(seg["duration_s"] * 8))

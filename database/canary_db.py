@@ -1,30 +1,3 @@
-"""
-canary_db.py
-=============
-Central SQLite database module for The Canary.
-
-Stores user voice profiles and personalisation preferences in canary.db.
-Uses only Python stdlib (sqlite3, json, pathlib) — no extra dependencies.
-
-Schema
-------
-  users       — one row per enrolled speaker (voice scalars + prefs + blob JSON)
-  recordings  — one row per WAV file, FK → users.speaker_id
-
-Public API
-----------
-  init_db()               → None
-  get_db_path()           → Path
-  get_connection()        → sqlite3.Connection
-  get_user_count()        → int
-  get_user(name)          → dict | None
-  get_all_users()         → list[dict]
-  upsert_user(name, vp, prefs) → int   (speaker_id)
-  update_preferences(name, prefs) → bool
-  get_preferences(name)   → dict
-  delete_user(name)       → bool
-  list_enrolled()         → list[str]
-"""
 
 from __future__ import annotations
 
@@ -33,11 +6,9 @@ import sqlite3
 from pathlib import Path
 from typing import Optional
 
-# ── DB location ───────────────────────────────────────────────────────────────
-_PROJECT_ROOT = Path(__file__).parent.parent   # The-Canary root
+_PROJECT_ROOT = Path(__file__).parent.parent
 _DB_FILE      = _PROJECT_ROOT / "database" / "canary.db"
 
-# ── DDL ───────────────────────────────────────────────────────────────────────
 _CREATE_USERS = """
 CREATE TABLE IF NOT EXISTS users (
     speaker_id        INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -77,15 +48,12 @@ CREATE TABLE IF NOT EXISTS recordings (
 );
 """
 
-# ── Helpers ───────────────────────────────────────────────────────────────────
 
 def get_db_path() -> Path:
-    """Returns absolute path to canary.db."""
     return _DB_FILE
 
 
 def get_connection() -> sqlite3.Connection:
-    """Returns a connection to canary.db with Row factory enabled."""
     conn = sqlite3.connect(str(_DB_FILE))
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
@@ -93,13 +61,11 @@ def get_connection() -> sqlite3.Connection:
 
 
 def init_db() -> None:
-    """Create tables if they don't exist, and migrate existing tables."""
     conn = get_connection()
     try:
         conn.execute(_CREATE_USERS)
         conn.execute(_CREATE_RECORDINGS)
         conn.commit()
-        # Migration: add priority column if it doesn't exist (for existing DBs)
         cols = [row[1] for row in conn.execute("PRAGMA table_info(users)").fetchall()]
         if "priority" not in cols:
             conn.execute("ALTER TABLE users ADD COLUMN priority INTEGER DEFAULT 3")
@@ -109,7 +75,6 @@ def init_db() -> None:
 
 
 def _row_to_dict(row: sqlite3.Row) -> dict:
-    """Convert a sqlite3.Row to a plain dict, parsing JSON blob columns."""
     d = dict(row)
     for col in ("embedding_centroid", "mfcc_mean"):
         if d.get(col) and isinstance(d[col], str):
@@ -120,10 +85,7 @@ def _row_to_dict(row: sqlite3.Row) -> dict:
     return d
 
 
-# ── Public API ────────────────────────────────────────────────────────────────
-
 def get_user_count() -> int:
-    """Returns number of enrolled users."""
     init_db()
     conn = get_connection()
     try:
@@ -134,10 +96,6 @@ def get_user_count() -> int:
 
 
 def get_user(name: str) -> Optional[dict]:
-    """
-    Returns full user record as dict, or None if not found.
-    Case-insensitive name lookup.
-    """
     init_db()
     conn = get_connection()
     try:
@@ -150,7 +108,6 @@ def get_user(name: str) -> Optional[dict]:
 
 
 def get_all_users() -> list[dict]:
-    """Returns list of all user records."""
     init_db()
     conn = get_connection()
     try:
@@ -161,32 +118,13 @@ def get_all_users() -> list[dict]:
 
 
 def upsert_user(name: str, voice_profile: dict, preferences: dict = None) -> int:
-    """
-    Insert or update a user. Returns speaker_id.
-
-    voice_profile is the dict from enroll_speaker():
-      embedding_centroid  list[192]
-      pitch               {mean, std, min, max}
-      energy              {mean, std}
-      speech_rate         float
-      mfcc_mean           list[40]
-      spectral            {centroid, bandwidth}
-      recording_count     int
-      recordings          list[str]
-
-    preferences is optional dict with keys: city, news_country, favorite_genre.
-
-    MAX 5 USERS: raises ValueError if at capacity and this is a new user.
-    """
     init_db()
     name = name.strip()
 
-    # Check capacity for new users
     existing = get_user(name)
     if existing is None and get_user_count() >= 5:
         raise ValueError("Maximum of 5 users allowed.")
 
-    # Extract scalars from voice_profile
     pitch   = voice_profile.get("pitch", {})
     energy  = voice_profile.get("energy", {})
     spectral = voice_profile.get("spectral", {})
@@ -199,7 +137,6 @@ def upsert_user(name: str, voice_profile: dict, preferences: dict = None) -> int
 
     recording_count = voice_profile.get("recording_count", 0)
 
-    # Merge preferences (use existing values as base, then overlay new ones)
     prefs = {
         "city":          "Bengaluru",
         "news_country":  "India",
@@ -259,13 +196,11 @@ def upsert_user(name: str, voice_profile: dict, preferences: dict = None) -> int
         )
         conn.commit()
 
-        # Refresh the speaker_id (could be new insert or existing row)
         row = conn.execute(
             "SELECT speaker_id FROM users WHERE LOWER(name) = LOWER(?)", (name,)
         ).fetchone()
         speaker_id = row["speaker_id"]
 
-        # Sync recordings table
         recordings = voice_profile.get("recordings", [])
         if recordings:
             conn.execute("DELETE FROM recordings WHERE speaker_id = ?", (speaker_id,))
@@ -281,10 +216,6 @@ def upsert_user(name: str, voice_profile: dict, preferences: dict = None) -> int
 
 
 def update_preferences(name: str, preferences: dict) -> bool:
-    """
-    Update only the preferences fields for a user.
-    Returns True if user was found and updated.
-    """
     init_db()
     user = get_user(name)
     if user is None:
@@ -299,7 +230,7 @@ def update_preferences(name: str, preferences: dict) -> bool:
         updates["favorite_genre"] = preferences["favorite_genre"]
 
     if not updates:
-        return True   # nothing to update, user exists
+        return True
 
     set_clause = ", ".join(f"{k} = ?" for k in updates)
     values     = list(updates.values()) + [user["speaker_id"]]
@@ -316,10 +247,6 @@ def update_preferences(name: str, preferences: dict) -> bool:
 
 
 def get_preferences(name: str) -> dict:
-    """
-    Returns preferences dict {city, news_country, favorite_genre} for a user,
-    or sensible defaults if the user is not found.
-    """
     init_db()
     user = get_user(name)
     if user is None:
@@ -332,7 +259,6 @@ def get_preferences(name: str) -> dict:
 
 
 def delete_user(name: str) -> bool:
-    """Delete a user and their recordings. Returns True if user was found and deleted."""
     init_db()
     user = get_user(name)
     if user is None:
@@ -350,7 +276,6 @@ def delete_user(name: str) -> bool:
 
 
 def update_priority(name: str, priority: int) -> bool:
-    """Set the priority (1-5) for a user. Returns True if user was found and updated."""
     init_db()
     user = get_user(name)
     if user is None:
@@ -369,7 +294,6 @@ def update_priority(name: str, priority: int) -> bool:
 
 
 def list_enrolled() -> list[str]:
-    """Returns list of enrolled speaker names."""
     init_db()
     conn = get_connection()
     try:

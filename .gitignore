@@ -39,7 +39,7 @@ Voices/
 # The Canary specific
 outputs/             # per-run separated audio + transcript files
 20*/                 # any leftover root-level timestamped folders
-pretrained_models/   # downloaded SepFormer / model weights
+pretrained_models/   # downloaded model weights
 /tmp/
 canary.db            # SQLite user profile database (local only)
 

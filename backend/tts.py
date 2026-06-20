@@ -1,8 +1,3 @@
-"""
-backend/tts.py
-==============
-Text-to-Speech using gTTS + pygame for audio playback.
-"""
 
 import os
 import tempfile
@@ -18,7 +13,6 @@ def init_mixer():
 
 
 def speak(text: str, lang: str = 'en'):
-    """Convert text to speech and play it via pygame."""
     if not text:
         return
 
@@ -39,7 +33,6 @@ def speak(text: str, lang: str = 'en'):
 
 
 def play_audio_file(filepath: str, max_duration_sec: int = 0):
-    """Play an audio file (MP3/WAV/OGG) using pygame mixer."""
     if not os.path.exists(filepath):
         print(f"    [Audio] File not found: {filepath}")
         return
@@ -56,7 +49,6 @@ def play_audio_file(filepath: str, max_duration_sec: int = 0):
                 break
             pygame.time.Clock().tick(10)
 
-        # Small buffer to ensure the last syllable plays fully
         time.sleep(0.5)
     except Exception as e:
         print(f"    [Audio] Playback error: {e}")

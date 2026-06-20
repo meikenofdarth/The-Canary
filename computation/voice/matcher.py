@@ -1,32 +1,3 @@
-"""
-voice_computation/matcher.py
-=============================
-Runtime Feature Matcher for Voice Identity Engine.
-
-Given a runtime audio buffer, extracts the same 5 feature groups used during
-enrollment and computes a weighted similarity score against every enrolled
-speaker profile.
-
-Similarity methods per group:
-
-  Group A  Embedding   — cosine similarity          (range [−1, 1] → clamped [0, 1])
-  Group B  Pitch       — Gaussian-kernel similarity  (penalises large mean-pitch diff)
-  Group C  Energy      — Gaussian-kernel similarity  (on mean RMS)
-  Group D  Speech rate — Gaussian-kernel similarity  (on syllables/sec)
-  Group E  MFCC        — cosine similarity on centroid vector
-
-Final weighted score:
-    score = 0.60 * emb_sim
-          + 0.15 * pitch_sim
-          + 0.10 * energy_sim
-          + 0.10 * rate_sim
-          + 0.05 * mfcc_sim
-
-Public API
-----------
-  score_against_all(audio, sr) -> dict[str, dict]
-      Returns per-speaker scores + component breakdown.
-"""
 
 from __future__ import annotations
 
@@ -39,119 +10,116 @@ import soundfile as sf
 
 VOICES_ROOT = Path(__file__).parent.parent.parent / "database" / "Voices"
 
-# Fusion weights  (must sum to 1.0)
-# ECAPA-TDNN embedding gets 95%: it is trained specifically for speaker ID
-# and is far more discriminative than hand-crafted acoustic features on
-# short (7s) Indian-household recordings with background noise.
 W_EMBEDDING = 0.95
 W_PITCH     = 0.01
 W_ENERGY    = 0.01
 W_RATE      = 0.01
 W_MFCC      = 0.02
 
-# Gaussian kernel widths (σ) — tuned to typical inter-speaker ranges
-SIGMA_PITCH  = 25.0    # Hz   — ~2 semitones for typical inter-speaker pitch diff
-SIGMA_ENERGY = 0.08    # RMS  — empirically ~0.05–0.10 between speakers
-SIGMA_RATE   = 1.2     # syl/sec — typical ±1 syl/sec between speakers
+SIGMA_PITCH  = 25.0
+SIGMA_ENERGY = 0.08
+SIGMA_RATE   = 1.2
 
-
-# ─────────────────────────────────────────────────────────────────────────────
-#  Similarity primitives
-# ─────────────────────────────────────────────────────────────────────────────
 
 def _cosine_sim(a: np.ndarray, b: np.ndarray) -> float:
-    """Cosine similarity clamped to [0, 1]."""
     a = a.astype(np.float64)
     b = b.astype(np.float64)
     denom = (np.linalg.norm(a) + 1e-10) * (np.linalg.norm(b) + 1e-10)
-    raw   = float(np.dot(a, b) / denom)
-    return float(np.clip((raw + 1.0) / 2.0, 0.0, 1.0))
+    return float(np.clip(np.dot(a, b) / denom, 0.0, 1.0))
 
 
 def _gaussian_sim(x: float, mu: float, sigma: float) -> float:
-    """
-    Gaussian-kernel similarity: 1.0 when x == mu, falls off symmetrically.
-    Never goes below 0.
-    """
     return float(np.exp(-0.5 * ((x - mu) / (sigma + 1e-10)) ** 2))
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-#  Profile loader with numpy array re-hydration
-# ─────────────────────────────────────────────────────────────────────────────
+def _extract_windowed_embeddings(audio: np.ndarray,
+                                 window_s: float = 1.5, hop_s: float = 0.5) -> list:
+    from computation.voice.features import _extract_embedding
+
+    sr = 16_000
+    win_len = int(window_s * sr)
+    hop_len = int(hop_s * sr)
+
+    embeddings = []
+    pos = 0
+    while pos + win_len <= len(audio):
+        window = audio[pos: pos + win_len]
+        if float(np.sqrt(np.mean(window ** 2))) >= 0.005:
+            embeddings.append(_extract_embedding(window))
+        pos += hop_len
+
+    if not embeddings:
+        embeddings.append(_extract_embedding(audio))
+
+    return embeddings
+
+
+def _best_sim_windowed(embeddings: list, profile: dict) -> float:
+    best = 0.0
+    refs = [profile["_embedding_centroid_np"]]
+    extra = profile.get("_embeddings_np")
+    if extra is not None:
+        refs.extend(extra)
+
+    for emb in embeddings:
+        for ref in refs:
+            s = _cosine_sim(emb, ref)
+            if s > best:
+                best = s
+    return best
+
 
 def _load_profiles() -> dict:
-    """
-    Load all enrolled speaker profiles.
-
-    Returns dict: {name: profile_dict}
-    Embedding centroid is loaded from features/ as np.ndarray for speed.
-    """
+    from database.canary_db import get_all_users
     profiles = {}
-    if not VOICES_ROOT.exists():
-        return profiles
-
-    for spk_dir in sorted(VOICES_ROOT.iterdir()):
-        if not spk_dir.is_dir():
+    for u in get_all_users():
+        name = u.get("name")
+        emb  = u.get("embedding_centroid")
+        if not name or not emb:
             continue
-        pfile = spk_dir / "profile.json"
-        if not pfile.exists():
-            continue
-        with open(pfile) as fh:
-            p = json.load(fh)
-
-        # Prefer loading centroid embedding from .npy for numerical precision
-        npy_centroid = spk_dir / "features" / "embedding_centroid.npy"
-        if npy_centroid.exists():
-            p["_embedding_centroid_np"] = np.load(str(npy_centroid))
-        else:
-            p["_embedding_centroid_np"] = np.array(
-                p["embedding_centroid"], dtype=np.float32)
-
-        # Also load MFCC centroid from npy if available
-        npy_mfcc = spk_dir / "features" / "mfcc_mean.npy"
-        if npy_mfcc.exists():
-            p["_mfcc_centroid_np"] = np.load(str(npy_mfcc)).mean(axis=0)
-        else:
-            p["_mfcc_centroid_np"] = np.array(
-                p.get("mfcc_mean", [0.0] * 40), dtype=np.float32)
-
-        profiles[p["name"]] = p
-
+        emb_np  = np.array(emb, dtype=np.float32)
+        mfcc_np = np.array(u.get("mfcc_mean") or [0.0]*40, dtype=np.float32)
+        profiles[name] = {
+            "name": name,
+            "_embedding_centroid_np": emb_np,
+            "_embeddings_np":         emb_np[None, :],
+            "_mfcc_centroid_np":      mfcc_np,
+            "pitch":       {"mean": float(u.get("pitch_mean")  or 0.0)},
+            "energy":      {"mean": float(u.get("energy_mean") or 0.0)},
+            "speech_rate": float(u.get("speech_rate") or 0.0),
+        }
     return profiles
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-#  Per-speaker scoring
-# ─────────────────────────────────────────────────────────────────────────────
+def _score_against_profile(runtime_feats: dict, profile: dict,
+                           is_multi: bool = False) -> dict:
+    windowed_embs = runtime_feats.get("_windowed_embeddings")
+    if windowed_embs:
+        emb_sim = _best_sim_windowed(windowed_embs, profile)
+    else:
+        emb_rt  = runtime_feats["embedding"]
+        emb_sim = _cosine_sim(emb_rt, profile["_embedding_centroid_np"])
+        refs = profile.get("_embeddings_np")
+        if refs is not None:
+            for ref in refs:
+                s = _cosine_sim(emb_rt, ref)
+                if s > emb_sim:
+                    emb_sim = s
 
-def _score_against_profile(runtime_feats: dict, profile: dict) -> dict:
-    """
-    Compute weighted similarity between runtime features and one profile.
+    emb_sim = min(float(emb_sim) + 0.10, 1.0)
 
-    Returns a component breakdown dict + final_score.
-    """
-    # A — Embedding
-    emb_rt  = runtime_feats["embedding"]
-    emb_ref = profile["_embedding_centroid_np"]
-    emb_sim = _cosine_sim(emb_rt, emb_ref)
-
-    # B — Pitch (compare mean pitch only)
     pitch_rt  = runtime_feats["pitch"]["mean_pitch"]
     pitch_ref = profile["pitch"]["mean"]
     pitch_sim = _gaussian_sim(pitch_rt, pitch_ref, SIGMA_PITCH)
 
-    # C — Energy
     energy_rt  = runtime_feats["energy"]["mean_rms"]
     energy_ref = profile["energy"]["mean"]
     energy_sim = _gaussian_sim(energy_rt, energy_ref, SIGMA_ENERGY)
 
-    # D — Speaking rate
     rate_rt  = runtime_feats["speaking_rate"]["syllables_per_second"]
     rate_ref = profile["speech_rate"]
     rate_sim = _gaussian_sim(rate_rt, rate_ref, SIGMA_RATE)
 
-    # E — MFCC centroid cosine
     mfcc_rt  = runtime_feats["spectral"]["mfcc_mean"]
     mfcc_ref = profile["_mfcc_centroid_np"]
     mfcc_sim = _cosine_sim(mfcc_rt, mfcc_ref)
@@ -172,7 +140,6 @@ def _score_against_profile(runtime_feats: dict, profile: dict) -> dict:
         "speech_rate":  round(float(rate_sim),   4),
         "mfcc":         round(float(mfcc_sim),   4),
 
-        # Raw values for diagnostics
         "_pitch_rt":   round(float(pitch_rt),    2),
         "_pitch_ref":  round(float(pitch_ref),   2),
         "_rate_rt":    round(float(rate_rt),     3),
@@ -180,37 +147,10 @@ def _score_against_profile(runtime_feats: dict, profile: dict) -> dict:
     }
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-#  Public API
-# ─────────────────────────────────────────────────────────────────────────────
-
 def score_against_all(audio: np.ndarray, sr: int,
-                      profiles: dict | None = None) -> dict:
-    """
-    Extract features from runtime audio and score against every enrolled
-    speaker profile.
-
-    Parameters
-    ----------
-    audio    : np.ndarray   raw audio samples
-    sr       : int          sample rate of audio
-    profiles : dict | None  pre-loaded profiles (pass to avoid re-loading in loops)
-
-    Returns
-    -------
-    dict[str, dict]
-        Keyed by speaker name. Each value contains:
-            final_score  — weighted similarity score [0, 1]
-            embedding    — component score [0, 1]
-            pitch        — component score [0, 1]
-            energy       — component score [0, 1]
-            speech_rate  — component score [0, 1]
-            mfcc         — component score [0, 1]
-            _pitch_rt    — runtime pitch (Hz)  [diagnostic]
-            _pitch_ref   — profile pitch (Hz)  [diagnostic]
-            _rate_rt     — runtime speaking rate [diagnostic]
-            _rate_ref    — profile speaking rate [diagnostic]
-    """
+                      profiles: dict | None = None,
+                      is_multi: bool = False,
+                      exclude: set | None = None) -> dict:
     from computation.voice.features import extract
 
     if profiles is None:
@@ -223,18 +163,22 @@ def score_against_all(audio: np.ndarray, sr: int,
         warnings.simplefilter("ignore")
         runtime_feats = extract(audio, sr)
 
+    from computation.voice.features import _resample_mono
+    audio16 = _resample_mono(audio, sr)
+    runtime_feats["_windowed_embeddings"] = _extract_windowed_embeddings(audio16)
+
     results = {}
     for name, profile in profiles.items():
-        results[name] = _score_against_profile(runtime_feats, profile)
+        if exclude and name in exclude:
+            continue
+        results[name] = _score_against_profile(runtime_feats, profile,
+                                               is_multi=is_multi)
 
     return results
 
 
 def score_file(wav_path: str | Path,
                profiles: dict | None = None) -> dict:
-    """
-    Convenience wrapper: load a .wav file and score against all profiles.
-    """
     audio, sr = sf.read(str(wav_path), dtype="float32")
     if audio.ndim > 1:
         audio = audio.mean(axis=-1)

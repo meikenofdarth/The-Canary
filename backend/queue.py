@@ -1,9 +1,3 @@
-"""
-execution/queue.py
-===================
-Execution Queue Manager.
-Reads the response.json payload and executes commands using the SLM/MCP server.
-"""
 
 import json
 from pathlib import Path
@@ -11,11 +5,6 @@ from .mcp_server import execute_intent
 from .tts import speak
 
 def load_user_profiles():
-    """
-    Load user profiles from canary.db.
-    Returns dict in the same format as the old user_profiles.json:
-      {name: {location, favorite_music_genre, news_country}}
-    """
     try:
         import sys as _sys
         from pathlib import Path as _Path
@@ -36,9 +25,6 @@ def load_user_profiles():
     return {}
 
 def process_arbitration(response_payload: dict):
-    """
-    Takes the response.json payload containing arbitration route and executes it.
-    """
     route = response_payload.get("route", "IGNORE")
     all_speakers = response_payload.get("all_speakers", [])
     active_command = response_payload.get("active_command", {})
@@ -46,28 +32,21 @@ def process_arbitration(response_payload: dict):
     
     profiles = load_user_profiles()
     
-    print("\n  ╔══════════════════════════════════════════════════╗")
-    print("  ║   EXECUTION ENGINE                              ║")
-    print("  ╚══════════════════════════════════════════════════╝")
+    print("\n  ── Execution ────────────────────────────────────")
     
-    # 1. Check for Known-User Conflict Override
     commands = [s for s in all_speakers if s.get("wakeword") and s.get("domain")]
     known_user_commands = [c for c in commands if c.get("known_user")]
     
-    # Check if there's an actual conflict flag from Hemang's engine
     conflict_data = response_payload.get("conflict", {})
     is_conflict = conflict_data.get("detected", False)
     
     if is_conflict and len(known_user_commands) >= 2:
-        # If there are multiple commands from known users AND they conflict, we ask to clarify, 
-        # overriding the normal arbitration output!
         print("  [Queue] Override: Conflicting commands from multiple known users.")
         names = [c.get("identity", "Unknown") for c in known_user_commands]
         name_str = " and ".join(names)
         speak(f"I heard multiple conflicting requests from {name_str}. Please clarify who I should listen to.")
         return
     
-    # 2. Proceed with normal routing
     if route == "IGNORE":
         print("  [Queue] Route is IGNORE. No action taken.")
         return

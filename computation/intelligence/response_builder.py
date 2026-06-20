@@ -1,105 +1,3 @@
-"""
-context_engine/response_builder.py
-=====================================
-Builds the final response.json for The Canary.
-
-This file is the last stage in the context pipeline.  It takes the
-fully-assembled context (from context_builder.py), the arbitration result
-(from arbitration_engine.py), and the per-speaker intent results (from
-intent_engine.py), and produces a single, context-rich response.json that
-is ready to be consumed by an LLM or downstream model.
-
-The output is designed to be:
-    - Self-contained  : every field the model needs is present inline.
-    - Traceable       : every decision includes a human-readable reason.
-    - Structured      : consistent key names, typed values, no ambiguity.
-    - LLM-ready       : includes an llm_prompt section pre-formatted for
-                        direct injection into a language model prompt.
-
-Output schema (response.json)
-------------------------------
-{
-    "schema_version":  "1.0",
-    "timestamp":       ISO-8601 string,
-    "session_dir":     str,
-
-    "scene": {
-        "drs_mode":      str,           -- A / B / C from DRS
-        "speaker_count": int,
-        "complexity":    float,
-        "noise_level":   float,
-        "simul_speech":  float
-    },
-
-    "active_command": {                 -- The command the system will act on
-        "speaker_id":   str | null,
-        "identity":     str | null,     -- Enrolled name or "Unknown"
-        "known_user":   bool,
-        "transcript":   str,
-        "domain":       str,            -- WEATHER | NEWS | SONGS | UNKNOWN
-        "polarity":     str,            -- POSITIVE | NEGATIVE | NEUTRAL
-        "intent_confidence": float,
-        "entities":     dict,
-        "wakeword":     bool,
-        "wakeword_phrase": str | null,
-        "wakeword_confidence": float,
-        "priority_score": float
-    } | null,
-
-    "route":    str,                    -- EXECUTE | CLARIFY | SEQUENTIAL | IGNORE
-    "route_reason": str,
-
-    "all_speakers": [
-        {
-            "speaker_id":          str,
-            "identity":            str,
-            "known_user":          bool,
-            "status":              str,
-            "transcript":          str,
-            "wakeword":            bool,
-            "wakeword_phrase":     str | null,
-            "wakeword_confidence": float,
-            "domain":              str,
-            "polarity":            str,
-            "intent_confidence":   float,
-            "entities":            dict,
-            "raw_signals":         list[str],
-            "priority_score":      float,
-            "identity_confidence": float
-        },
-        ...
-    ],
-
-    "conflict": {
-        "detected":      bool,
-        "conflict_pair": list[str] | null,
-        "description":   str
-    },
-
-    "sequential_queue": [               -- Non-empty only when route == SEQUENTIAL
-        {
-            "order":      int,
-            "speaker_id": str,
-            "identity":   str,
-            "domain":     str,
-            "transcript": str
-        },
-        ...
-    ],
-
-    "clarification_prompt": str | null, -- Non-null only when route == CLARIFY
-
-    "llm_prompt": {
-        "system": str,
-        "user":   str
-    },
-
-    "priority_engine_log": [            -- Step-by-step trace of arbitration rules
-        str,
-        ...
-    ]
-}
-"""
 
 from __future__ import annotations
 
@@ -108,9 +6,6 @@ import datetime
 from pathlib import Path
 
 
-# =============================================================================
-#  HELPERS
-# =============================================================================
 def _speaker_domain(spk: dict) -> str:
     ir = spk.get("intent_result") or {}
     return ir.get("domain", "UNKNOWN")
@@ -150,9 +45,6 @@ def _identity_conf_from_arb(arb_list: list[dict], speaker_id: str) -> float:
     return 0.0
 
 
-# =============================================================================
-#  LLM PROMPT BUILDER
-# =============================================================================
 _SYSTEM_PROMPT_TEMPLATE = """\
 You are The Canary, a smart home voice assistant.
 You have received and analysed a voice command from a household session.
@@ -175,9 +67,6 @@ def _build_llm_prompt(
     clarification_prompt: str | None,
     sequential_queue: list[dict],
 ) -> dict:
-    """
-    Build the llm_prompt section: system + user messages.
-    """
     system = _SYSTEM_PROMPT_TEMPLATE
 
     if route == "IGNORE":
@@ -247,14 +136,7 @@ def _build_llm_prompt(
     return {"system": system, "user": user}
 
 
-# =============================================================================
-#  PRIORITY ENGINE LOG BUILDER
-# =============================================================================
 def _build_priority_log(arb_result: dict, speakers: list[dict]) -> list[str]:
-    """
-    Produce a human-readable step-by-step log of how the arbitration rules
-    were applied.  This is useful for debugging and for LLM explanation tasks.
-    """
     log: list[str] = []
     route = arb_result.get("route", "UNKNOWN")
     reason = arb_result.get("reason", "")
@@ -281,7 +163,6 @@ def _build_priority_log(arb_result: dict, speakers: list[dict]) -> list[str]:
         log.append(f"  Route: EXECUTE")
         return log
 
-    # Sort active by priority
     active_sorted = sorted(active, key=lambda s: s["priority"], reverse=True)
     top = active_sorted[0]
     second = active_sorted[1]
@@ -297,7 +178,6 @@ def _build_priority_log(arb_result: dict, speakers: list[dict]) -> list[str]:
             f"id_conf={s['identity_confidence']:.4f}"
         )
 
-    # Check Rule 2
     if top["known_user"] and not second["known_user"]:
         log.append("Rule 2 FIRED — Known user vs Unknown user.")
         log.append(f"  Known user ({top['identity']}) beats Unknown outright.")
@@ -306,21 +186,22 @@ def _build_priority_log(arb_result: dict, speakers: list[dict]) -> list[str]:
 
     log.append(f"Priority gap between top-2: {gap:.4f}  (threshold: 0.15)")
 
-    # Check Rule 3
     if gap > 0.15:
         log.append("Rule 3 FIRED — Clear priority gap detected.")
         log.append(f"  {top['identity'] if top['known_user'] else 'Speaker'} wins. Route: EXECUTE")
         return log
 
-    # Both known — check for same intent (Rule 6)
     intents = [s.get("intent") for s in active_sorted if s.get("intent")]
-    if len(set(intents)) == 1 and intents[0] not in (None, "GENERAL_COMMAND"):
-        log.append("Rule 6 FIRED — All active speakers share the same intent.")
-        log.append(f"  Intent: {intents[0]}. Execute once for highest-priority speaker.")
-        log.append(f"  Route: EXECUTE")
+    if len(active_sorted) >= 2 and len(set(intents)) == 1 and intents[0] not in (None, "GENERAL_COMMAND"):
+        log.append("Rule 6 FIRED — Multiple active speakers share the same intent.")
+        log.append(f"  Intent: {intents[0]}. SEQUENTIAL execution in priority order")
+        log.append(f"  (each user gets their personalized response).")
+        for i, s in enumerate(active_sorted, start=1):
+            ident = s['identity'] if s['known_user'] else s['id']
+            log.append(f"  Queue position {i}: {ident}  priority={s['priority']:.2f}")
+        log.append(f"  Route: SEQUENTIAL")
         return log
 
-    # Check Rule 4
     if route == "CLARIFY":
         log.append("Rule 4 FIRED — Conflicting commands, close priority.")
         log.append("  Two known users with near-equal priority, opposite commands.")
@@ -328,7 +209,6 @@ def _build_priority_log(arb_result: dict, speakers: list[dict]) -> list[str]:
         log.append(f"  Reason: {reason}")
         return log
 
-    # Rule 5
     log.append("Rule 5 FIRED — Non-conflicting commands, close priority.")
     log.append("  Multiple known users, similar priority, compatible commands.")
     log.append("  Route: SEQUENTIAL — queue commands by priority order.")
@@ -338,39 +218,17 @@ def _build_priority_log(arb_result: dict, speakers: list[dict]) -> list[str]:
     return log
 
 
-# =============================================================================
-#  PUBLIC API
-# =============================================================================
 def build_response(
     context:    dict,
     arb_result: dict,
     out_dir:    Path,
 ) -> dict:
-    """
-    Build and save the final response.json for one pipeline session.
-
-    Parameters
-    ----------
-    context : dict
-        The full context dict returned by context_builder.build_context().
-        Must already have per-speaker "intent_result" keys populated by
-        intent_engine.analyze_intents_for_speakers().
-    arb_result : dict
-        The arbitration result dict from arbitration_engine.arbitrate().
-    out_dir : pathlib.Path
-        Session output directory where response.json will be written.
-
-    Returns
-    -------
-    dict — the response payload (also written to out_dir/response.json).
-    """
     out_dir = Path(out_dir)
     speakers = context.get("speakers", [])
     arb_list = arb_result.get("arbitration", [])
     route = arb_result.get("route", context.get("route", "IGNORE"))
     winner_id = arb_result.get("winner")
 
-    # ── Build all_speakers ─────────────────────────────────────────────────
     all_speakers: list[dict] = []
     for spk in speakers:
         sid = spk["id"]
@@ -392,7 +250,6 @@ def build_response(
             "identity_confidence": _identity_conf_from_arb(arb_list, sid),
         })
 
-    # ── Build active_command ───────────────────────────────────────────────
     active_command: dict | None = None
     if winner_id:
         winner_spk = next((s for s in speakers if s["id"] == winner_id), None)
@@ -413,7 +270,6 @@ def build_response(
                 "priority_score":      _priority_from_arb(arb_list, winner_id),
             }
 
-    # ── Conflict block ─────────────────────────────────────────────────────
     conflict_detected = context.get("conflict", False)
     conflict_pair = context.get("conflict_pair")
     conflict_block = {
@@ -426,12 +282,12 @@ def build_response(
         ),
     }
 
-    # ── Sequential queue ───────────────────────────────────────────────────
     sequential_queue: list[dict] = []
     if route == "SEQUENTIAL":
         active_sorted_spk = sorted(
             [s for s in speakers if s.get("wakeword") and s.get("type") == "COMMAND"],
-            key=lambda s: s.get("start_time", 0.0),
+            key=lambda s: s.get("priority_score", 0.0),
+            reverse=True,
         )
         for order, spk in enumerate(active_sorted_spk, start=1):
             ir = spk.get("intent_result") or {}
@@ -439,11 +295,13 @@ def build_response(
                 "order":      order,
                 "speaker_id": spk["id"],
                 "identity":   spk.get("identity", "UNKNOWN"),
+                "known_user": bool(spk.get("known_user", False)),
                 "domain":     ir.get("domain", "UNKNOWN"),
                 "transcript": spk.get("transcript", ""),
+                "entities":   ir.get("entities", {}) or {},
+                "polarity":   ir.get("polarity", "POSITIVE"),
             })
 
-    # ── Clarification prompt ───────────────────────────────────────────────
     clarification_prompt: str | None = None
     if route == "CLARIFY":
         active_arb = [
@@ -459,10 +317,8 @@ def build_response(
             f"Whose command should I execute?"
         )
 
-    # ── Priority engine log ─────────────────────────────────────────────────
     priority_log = _build_priority_log(arb_result, speakers)
 
-    # ── LLM prompt ─────────────────────────────────────────────────────────
     llm_prompt = _build_llm_prompt(
         route=route,
         active_command=active_command,
@@ -471,7 +327,6 @@ def build_response(
         sequential_queue=sequential_queue,
     )
 
-    # ── Scene block ─────────────────────────────────────────────────────────
     scene = context.get("scene", {})
     scene_block = {
         "drs_mode":      context.get("drs_mode", "?"),
@@ -481,7 +336,6 @@ def build_response(
         "simul_speech":  scene.get("simul_speech", 0.0),
     }
 
-    # ── Assemble final response ─────────────────────────────────────────────
     response: dict = {
         "schema_version":      "1.0",
         "timestamp":           datetime.datetime.now().isoformat(),
@@ -498,7 +352,6 @@ def build_response(
         "priority_engine_log": priority_log,
     }
 
-    # ── Write to file ───────────────────────────────────────────────────────
     rsp_path = out_dir / "response.json"
     rsp_path.write_text(
         json.dumps(response, indent=2, ensure_ascii=False),
@@ -509,17 +362,13 @@ def build_response(
 
 
 def print_response_summary(response: dict) -> None:
-    """Print a concise human-readable summary of the response.json."""
     route = response.get("route", "?")
     ac    = response.get("active_command")
     scene = response.get("scene", {})
 
     print()
-    print("  ╔══════════════════════════════════════════════════╗")
-    print("  ║   INTENT ENGINE  ·  response.json               ║")
-    print("  ╚══════════════════════════════════════════════════╝")
-    print(f"  Route     : {route}")
-    print(f"  Reason    : {response.get('route_reason', '')[:80]}")
+    print("  ── Intent ───────────────────────────────────────")
+    print(f"  Route: {route} — {response.get('route_reason', '')[:80]}")
 
     if ac:
         ident = ac.get("identity", "UNKNOWN")
@@ -527,30 +376,19 @@ def print_response_summary(response: dict) -> None:
         polarity = ac.get("polarity", "NEUTRAL")
         conf = ac.get("intent_confidence", 0.0)
         entities = ac.get("entities", {})
-        print(f"  Winner    : {ident}  ({ac.get('speaker_id')})")
-        print(f"  Domain    : {domain}  |  Polarity: {polarity}  |  Conf: {conf:.2f}")
+        print(f"  Winner: {ident}  ·  {domain} ({polarity}, {conf:.2f})")
         if entities:
-            print(f"  Entities  : {entities}")
+            print(f"  Entities: {entities}")
         tx = ac.get("transcript", "")
         if tx:
             preview = tx[:72] + ("..." if len(tx) > 72 else "")
-            print(f"  Transcript: \"{preview}\"")
+            print(f"  \"{preview}\"")
 
-    # Priority log
-    log = response.get("priority_engine_log", [])
-    if log:
-        print()
-        print("  -- Priority Engine Log --")
-        for line in log:
-            print(f"  {line}")
-
-    # Clarification
     cp = response.get("clarification_prompt")
     if cp:
         print()
         print(f"  Clarify   : \"{cp}\"")
 
-    # Sequential queue
     sq = response.get("sequential_queue", [])
     if sq:
         print()
@@ -558,5 +396,4 @@ def print_response_summary(response: dict) -> None:
         for entry in sq:
             print(f"    {entry['order']}. {entry['identity']} — {entry['domain']} — \"{entry['transcript'][:50]}\"")
 
-    print(f"  Saved     : {response.get('session_dir')}/response.json")
     print()

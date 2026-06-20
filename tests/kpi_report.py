@@ -1,22 +1,3 @@
-"""
-tests/kpi_report.py
-==================
-Performance harness for before/after comparison across model swaps.
-
-Measures the KPIs that the swaps could affect, on fixed fixtures, so you can
-run it once on the baseline (SepFormer + ECAPA) and again after each swap
-(TIGER / CAM++) and compare apples to apples.
-
-Reports:
-  1. SEPARATION  — SI-SNR (dB) of separated streams vs ground-truth references,
-                   using the best stream<->reference permutation.
-  2. xRT         — real-time factor of the separation call (target < 0.5).
-  3. SPEAKER ID  — identify() result on each clean reference clip.
-
-Run:
-    python tests/build_fixtures.py      # once, to create fixtures
-    python tests/kpi_report.py          # baseline, then re-run after each swap
-"""
 
 from __future__ import annotations
 
@@ -48,7 +29,6 @@ def _read(name: str) -> np.ndarray:
 
 def _best_permutation_si_snr(streams: list[np.ndarray],
                              refs: list[np.ndarray]) -> float:
-    """Average SI-SNR under the best stream->reference assignment."""
     k = min(len(streams), len(refs))
     streams = streams[:k]
     refs = refs[:k]
@@ -65,7 +45,6 @@ def test_separation_and_xrt() -> None:
     refs = [_read("ref_a.wav"), _read("ref_b.wav")]
     dur = len(mix) / SR
 
-    # Route through the SAME entry point the backend uses.
     from run_canary import detect_and_separate
 
     t0 = time.perf_counter()

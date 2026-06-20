@@ -1,41 +1,3 @@
-"""
-context_engine/intent_engine.py
-=================================
-Intent classification engine for The Canary.
-
-Covers the three primary action domains requested:
-    - WEATHER   : weather, temperature, forecast queries
-    - NEWS      : news, headlines, current events queries
-    - SONGS     : music playback, song requests
-
-For each domain both a POSITIVE intent (the speaker WANTS the action)
-and a NEGATIVE intent (the speaker explicitly does NOT want it) are
-detected.
-
-Additionally the engine extracts lightweight entities:
-    - WEATHER  : location, time_reference (today / tomorrow / weekend...)
-    - NEWS     : topic (sport, politics, tech...), source
-    - SONGS    : artist, genre, song title (best-effort, regex-free extraction)
-
-Output
-------
-analyze_intent(text: str) -> IntentResult (dict)
-
-    {
-        "domain":         "WEATHER" | "NEWS" | "SONGS" | "UNKNOWN",
-        "polarity":       "POSITIVE" | "NEGATIVE" | "NEUTRAL",
-        "confidence":     float,          # 0.0 – 1.0
-        "entities":       dict,           # domain-specific key/value pairs
-        "raw_signals":    list[str],      # matched keywords that fired
-        "original_text":  str
-    }
-
-Design principles
------------------
-- Zero ML models.  Pure rule-based regex + keyword matching.
-- No side-effects.  Stateless function — no global state is mutated.
-- Deterministic.  Same input always produces same output.
-"""
 
 from __future__ import annotations
 
@@ -43,23 +5,15 @@ import re
 from typing import TypedDict
 
 
-# =============================================================================
-#  TYPE
-# =============================================================================
 class IntentResult(TypedDict):
-    domain:        str          # WEATHER | NEWS | SONGS | UNKNOWN
-    polarity:      str          # POSITIVE | NEGATIVE | NEUTRAL
-    confidence:    float        # 0.0 – 1.0
-    entities:      dict         # extracted entities (domain-specific)
-    raw_signals:   list         # keywords/phrases that matched
+    domain:        str
+    polarity:      str
+    confidence:    float
+    entities:      dict
+    raw_signals:   list
     original_text: str
 
 
-# =============================================================================
-#  NEGATION PREFIXES
-#  These turn a positive match into a NEGATIVE polarity.
-#  Applied to a window of 5 tokens before the matched keyword.
-# =============================================================================
 _NEGATION_WORDS: frozenset[str] = frozenset({
     "no", "not", "don't", "dont", "do not", "never", "stop",
     "cancel", "skip", "skip the", "i don't want", "i dont want",
@@ -75,21 +29,10 @@ _NEGATION_RE = re.compile(
 
 
 def _has_negation(text: str, match_start: int) -> bool:
-    """
-    Return True if a negation word appears anywhere in the prefix before match_start.
-    """
     prefix = text[:match_start]
     return bool(_NEGATION_RE.search(prefix))
 
 
-# =============================================================================
-#  DOMAIN SIGNAL TABLES
-#  Each domain has:
-#      POSITIVE_SIGNALS  — list of (regex_string, weight)
-#      NEGATIVE_SIGNALS  — list of (regex_string, weight)   [explicit opt-out]
-# =============================================================================
-
-# ── WEATHER ──────────────────────────────────────────────────────────────────
 _WEATHER_POSITIVE: list[tuple[str, float]] = [
     (r"\bweather\b",                           1.0),
     (r"\bforecast\b",                          1.0),
@@ -118,7 +61,6 @@ _WEATHER_NEGATIVE: list[tuple[str, float]] = [
     (r"\bstop.{0,10}weather\b",               1.0),
 ]
 
-# ── NEWS ──────────────────────────────────────────────────────────────────────
 _NEWS_POSITIVE: list[tuple[str, float]] = [
     (r"\bnews\b",                              1.0),
     (r"\bheadlines?\b",                        1.0),
@@ -150,9 +92,8 @@ _NEWS_NEGATIVE: list[tuple[str, float]] = [
     (r"\benough\s+news\b",                      1.0),
 ]
 
-# ── SONGS ──────────────────────────────────────────────────────────────────
 _SONGS_POSITIVE: list[tuple[str, float]] = [
-    (r"\bplay\b",                              0.8),   # low alone — context-dependent
+    (r"\bplay\b",                              0.8),
     (r"\bsong(s)?\b",                          1.0),
     (r"\bmusic\b",                             1.0),
     (r"\btrack\b",                             0.9),
@@ -186,13 +127,10 @@ _SONGS_NEGATIVE: list[tuple[str, float]] = [
     (r"\bdon'?t\s+play.{0,20}music\b",         1.0),
     (r"\bi\s+don'?t\s+want.{0,20}(music|song)\b", 1.0),
     (r"\bstop\s+(the\s+)?song\b",              1.0),
-    (r"\bchange\s+(the\s+)?song\b",            0.7),  # not purely negative; could want next
+    (r"\bchange\s+(the\s+)?song\b",            0.7),
 ]
 
 
-# =============================================================================
-#  COMPILE ALL PATTERNS ONCE AT IMPORT
-# =============================================================================
 def _compile(signal_table: list[tuple[str, float]]) -> list[tuple[re.Pattern, float]]:
     return [(re.compile(p, re.IGNORECASE), w) for p, w in signal_table]
 
@@ -209,11 +147,6 @@ _W_NEGATIVE = {
 }
 
 
-# =============================================================================
-#  ENTITY EXTRACTORS (lightweight, no ML)
-# =============================================================================
-
-# ── WEATHER entities ──────────────────────────────────────────────────────────
 _TIME_REFS = re.compile(
     r"\b(today|tonight|tomorrow|this\s+week(end)?|next\s+week|"
     r"monday|tuesday|wednesday|thursday|friday|saturday|sunday|weekend)\b",
@@ -226,7 +159,6 @@ _LOCATION_PREP = re.compile(
 
 
 def _extract_weather_entities(text: str) -> dict:
-    # Strip punctuation first so "ammi, what is the weather in luxembourg?" works
     clean = re.sub(r"[^\w\s]", " ", text.lower())
 
     entities: dict = {}
@@ -238,7 +170,6 @@ def _extract_weather_entities(text: str) -> dict:
     loc_m = _LOCATION_PREP.search(clean)
     if loc_m:
         candidate = loc_m.group(1).strip().split()
-        # Take consecutive non-stopword words
         _STOP = {"music", "news", "songs", "song", "weather", "forecast",
                  "here", "home", "the", "a", "an", "me", "my", "us", "this", "that"}
         loc_words = []
@@ -248,13 +179,11 @@ def _extract_weather_entities(text: str) -> dict:
             loc_words.append(w)
         candidate_str = " ".join(loc_words).strip()
         if candidate_str and len(candidate_str) > 1 and candidate_str.lower() not in _STOP:
-            # Title-case it for display / API calls
             entities["location"] = candidate_str.title()
 
     return entities
 
 
-# ── NEWS entities ─────────────────────────────────────────────────────────────
 _NEWS_TOPICS = re.compile(
     r"\b(sport(?:s)?|cricket|football|soccer|basketball|"
     r"politics?|election|government|parliament|"
@@ -289,7 +218,6 @@ def _extract_news_entities(text: str) -> dict:
     if time_m:
         entities["time_reference"] = time_m.group(0).lower()
 
-    # Also extract location for news (e.g. "news of south africa")
     loc_m = _LOCATION_PREP.search(clean)
     if loc_m:
         candidate_words = loc_m.group(1).strip().split()
@@ -303,7 +231,6 @@ def _extract_news_entities(text: str) -> dict:
     return entities
 
 
-# ── SONGS entities ─────────────────────────────────────────────────────────────
 _GENRE_RE = re.compile(
     r"\b(english|hindi|bollywood|punjabi|tamil|telugu|kannada|marathi|"
     r"classical|jazz|rock|pop|rap|hip-?hop|lofi|lo-?fi|chill|sad|happy|"
@@ -329,7 +256,6 @@ def _extract_songs_entities(text: str) -> dict:
     if genres:
         entities["genres"] = list(dict.fromkeys(g.lower() for g in genres))
 
-    # Find "by " and extract consecutive title case words for artist
     by_m = re.search(r"\bby\s+([A-Za-z\s]+)", text, re.IGNORECASE)
     if by_m:
         after_by = by_m.group(1).strip()
@@ -351,43 +277,26 @@ def _extract_songs_entities(text: str) -> dict:
     if _PLAYLIST_RE.search(text):
         entities["is_playlist"] = True
 
-    # Best-effort song title: "play [song name]"
     play_m = _PLAY_SONG_RE.search(text)
     if play_m:
         title = play_m.group(1).strip()
-        # Remove trailing suffixes
         suffixes = ["on spotify", "on youtube", "please", "now", "again", "for me"]
         title_lower = title.lower()
         for suff in suffixes:
             if title_lower.endswith(suff):
                 title = title[:-len(suff)].strip()
                 title_lower = title.lower()
-        # Filter out pure genre matches or artist names to avoid duplication
         if not _GENRE_RE.fullmatch(title.strip()):
             entities["song_title_candidate"] = title
 
     return entities
 
 
-# =============================================================================
-#  CORE SCORER
-# =============================================================================
 def _score_domain(
     text: str,
     positive_patterns: list[tuple[re.Pattern, float]],
     negative_patterns: list[tuple[re.Pattern, float]],
 ) -> tuple[float, float, list[str], list[str]]:
-    """
-    Score a piece of text for a given domain.
-
-    Returns
-    -------
-    (positive_score, negative_score, pos_signals, neg_signals)
-        positive_score : raw accumulated weight of positive matches
-        negative_score : raw accumulated weight of negative (explicit opt-out) matches
-        pos_signals    : matched positive keyword phrases
-        neg_signals    : matched negative keyword phrases
-    """
     pos_score = 0.0
     neg_score = 0.0
     pos_signals: list[str] = []
@@ -396,9 +305,7 @@ def _score_domain(
     for pat, weight in positive_patterns:
         m = pat.search(text)
         if m:
-            # Check if the match is immediately negated in context
             if _has_negation(text, m.start()):
-                # Treat this as a negative signal instead
                 neg_score += weight * 0.8
                 neg_signals.append(f"[negated] {m.group(0)}")
             else:
@@ -414,31 +321,52 @@ def _score_domain(
     return pos_score, neg_score, pos_signals, neg_signals
 
 
-# =============================================================================
-#  PUBLIC API
-# =============================================================================
-def analyze_intent(text: str) -> IntentResult:
-    """
-    Classify the intent of an utterance into one of the three domains
-    (WEATHER, NEWS, SONGS) with positive or negative polarity.
+_PHONETIC_COMMANDS: dict[str, tuple[str, str]] = {
+    "what is the weather":  ("WEATHER", "POSITIVE"),
+    "weather forecast":     ("WEATHER", "POSITIVE"),
+    "is it sunny":          ("WEATHER", "POSITIVE"),
+    "is it raining":        ("WEATHER", "POSITIVE"),
+    "tell me the news":     ("NEWS",    "POSITIVE"),
+    "what is the news":     ("NEWS",    "POSITIVE"),
+    "latest headlines":     ("NEWS",    "POSITIVE"),
+    "play some music":      ("SONGS",   "POSITIVE"),
+    "play a song":          ("SONGS",   "POSITIVE"),
+    "stop the music":       ("SONGS",   "NEGATIVE"),
+    "pause the music":      ("SONGS",   "NEGATIVE"),
+}
 
-    Parameters
-    ----------
-    text : str
-        Raw transcript text from ASR.
+_ENTITY_EXTRACTORS = {
+    "WEATHER": "_extract_weather_entities",
+    "NEWS":    "_extract_news_entities",
+    "SONGS":   "_extract_songs_entities",
+}
 
-    Returns
-    -------
-    IntentResult dict:
-        {
-            "domain":        "WEATHER" | "NEWS" | "SONGS" | "UNKNOWN",
-            "polarity":      "POSITIVE" | "NEGATIVE" | "NEUTRAL",
-            "confidence":    float,
-            "entities":      dict,
-            "raw_signals":   list[str],
-            "original_text": str,
-        }
-    """
+
+def _phonetic_fallback(text: str, phonetic_profile: str) -> "IntentResult | None":
+    try:
+        from computation.intelligence.phonetic_matcher import match_command
+    except Exception:
+        return None
+
+    res = match_command(text, list(_PHONETIC_COMMANDS.keys()),
+                        profile=phonetic_profile)
+    if not res.get("matched"):
+        return None
+
+    domain, polarity = _PHONETIC_COMMANDS[res["command"]]
+    extractor = globals()[_ENTITY_EXTRACTORS[domain]]
+    return IntentResult(
+        domain=domain,
+        polarity=polarity,
+        confidence=round(max(0.55, 1.0 - res["distance"]), 4),
+        entities=extractor(text),
+        raw_signals=[f"phonetic:{res['command']} (d={res['distance']}, "
+                     f"profile={phonetic_profile})"],
+        original_text=text,
+    )
+
+
+def analyze_intent(text: str, phonetic_profile: str = "default") -> IntentResult:
     if not text or not text.strip():
         return IntentResult(
             domain="UNKNOWN",
@@ -451,7 +379,6 @@ def analyze_intent(text: str) -> IntentResult:
 
     text_clean = text.strip()
 
-    # Score all three domains
     results: dict[str, tuple] = {}
     for domain in ("WEATHER", "NEWS", "SONGS"):
         pos_s, neg_s, pos_sig, neg_sig = _score_domain(
@@ -461,7 +388,6 @@ def analyze_intent(text: str) -> IntentResult:
         )
         results[domain] = (pos_s, neg_s, pos_sig, neg_sig)
 
-    # Pick the domain with the highest combined absolute signal
     def _total_signal(d: str) -> float:
         pos_s, neg_s, _, _ = results[d]
         return pos_s + neg_s
@@ -470,8 +396,10 @@ def analyze_intent(text: str) -> IntentResult:
     pos_s, neg_s, pos_sig, neg_sig = results[best_domain]
     total = pos_s + neg_s
 
-    # If no domain produced any signal, return UNKNOWN
     if total < 0.5:
+        recovered = _phonetic_fallback(text_clean, phonetic_profile)
+        if recovered is not None:
+            return recovered
         return IntentResult(
             domain="UNKNOWN",
             polarity="NEUTRAL",
@@ -481,16 +409,13 @@ def analyze_intent(text: str) -> IntentResult:
             original_text=text_clean,
         )
 
-    # Determine polarity
     if neg_s > pos_s * 1.2:
-        # Explicit negative clearly dominates
         polarity = "NEGATIVE"
         dominant_score = neg_s
     elif pos_s > 0 and neg_s == 0:
         polarity = "POSITIVE"
         dominant_score = pos_s
     elif pos_s > 0 and neg_s > 0:
-        # Both signals present — whichever is stronger wins
         if pos_s >= neg_s:
             polarity = "POSITIVE"
             dominant_score = pos_s
@@ -504,19 +429,15 @@ def analyze_intent(text: str) -> IntentResult:
         polarity = "NEUTRAL"
         dominant_score = 0.0
 
-    # Confidence: normalise the dominant score to 0–1 using a soft cap at 3.0
-    # (because weighted sums can exceed 1.0 when multiple patterns fire)
     confidence = round(min(dominant_score / 3.0, 1.0), 4)
-    # Raise minimum confidence to 0.55 once any domain fires
     confidence = max(confidence, 0.55)
 
-    # Extract entities for the winning domain
     all_signals = pos_sig + neg_sig
     if best_domain == "WEATHER":
         entities = _extract_weather_entities(text_clean)
     elif best_domain == "NEWS":
         entities = _extract_news_entities(text_clean)
-    else:  # SONGS
+    else:
         entities = _extract_songs_entities(text_clean)
 
     return IntentResult(
@@ -529,23 +450,23 @@ def analyze_intent(text: str) -> IntentResult:
     )
 
 
-def analyze_intents_for_speakers(speakers: list[dict]) -> list[dict]:
-    """
-    Run analyze_intent on every speaker that has a transcript and a wakeword.
+def analyze_intents_for_speakers(speakers: list[dict], profiles: dict | None = None) -> list[dict]:
+    if profiles is None:
+        try:
+            from computation.voice.matcher import _load_profiles
+            profiles = _load_profiles()
+        except Exception:
+            profiles = {}
 
-    Parameters
-    ----------
-    speakers : list[dict]
-        Speaker records from context_builder.
-
-    Returns
-    -------
-    Same list, with an "intent_result" key attached to each speaker.
-    """
     for spk in speakers:
         transcript = spk.get("transcript", "")
+        name = spk.get("speaker")
+        phonetic_profile = "default"
+        if name and name in profiles:
+            phonetic_profile = profiles[name].get("phonetic_profile", "default")
+
         if transcript:
-            spk["intent_result"] = analyze_intent(transcript)
+            spk["intent_result"] = analyze_intent(transcript, phonetic_profile=phonetic_profile)
         else:
             spk["intent_result"] = IntentResult(
                 domain="UNKNOWN",

@@ -1,21 +1,4 @@
 #!/usr/bin/env python3
-"""
-add_voicer.py  –  The Canary Voice Enrollment CLI
-==================================================
-Run:  python3 add_voicer.py
-
-Guides a user through recording 3 scripted utterances and enrolls their
-voice profile into the Voice Identity Engine.
-
-Completely independent from run_canary.py. Safe to run at any time.
-
-Usage
------
-  python3 add_voicer.py                    # interactive mode
-  python3 add_voicer.py --name "Hemang"   # skip name prompt
-  python3 add_voicer.py --rebuild          # rebuild ALL profiles from existing recordings
-  python3 add_voicer.py --list             # list enrolled speakers
-"""
 
 import os
 import sys
@@ -32,23 +15,15 @@ import soundfile as sf
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-# ── Suppress HuggingFace Hub rate-limit / unauthenticated-request warning ─────
-# The model is cached locally after first download; the HF Hub is not contacted
-# at runtime. This warning is a false alarm for offline usage.
 logging.getLogger("huggingface_hub").setLevel(logging.ERROR)
 logging.getLogger("huggingface_hub.utils._headers").setLevel(logging.ERROR)
 os.environ["HF_HUB_DISABLE_IMPLICIT_TOKEN"] = "1"
 
 SAMPLE_RATE   = 16_000
-SILENCE_GATE  = -50.0       # dBFS below which we consider it silence (quality gate)
+SILENCE_GATE  = -50.0
 
-
-# ─────────────────────────────────────────────────────────────────────────────
-#  Terminal styling helpers
-# ─────────────────────────────────────────────────────────────────────────────
 
 def _cls():
-    """Clear the terminal."""
     import os
     os.system("cls" if os.name == "nt" else "clear")
 
@@ -81,10 +56,6 @@ def _err(text: str):
     print(f"  ✗  {text}")
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-#  Enrollment scripts
-# ─────────────────────────────────────────────────────────────────────────────
-
 SCRIPTS = [
     {
         "label": "Script 1 — Natural Speech",
@@ -116,54 +87,29 @@ SCRIPTS = [
 ]
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-#  Recording  —  VAD-based auto-stop
-# ─────────────────────────────────────────────────────────────────────────────
-
-# Smart recording constants
-_CALIBRATION_SEC  = 0.8    # measure ambient noise floor from first N seconds
-_SILENCE_TO_STOP  = 1.8    # seconds of silence after speech → auto-stop
-_MIN_SPEECH_SEC   = 2.5    # must capture at least this much speech before stopping
-_MAX_DURATION     = 30.0   # hard cap so the loop always terminates
-_FRAME_LEN        = int(SAMPLE_RATE * 0.030)   # 30 ms VAD frame
+_CALIBRATION_SEC  = 0.8
+_SILENCE_TO_STOP  = 1.8
+_MIN_SPEECH_SEC   = 2.5
+_MAX_DURATION     = 30.0
+_FRAME_LEN        = int(SAMPLE_RATE * 0.030)
 
 
 def _record_smart(label: str) -> np.ndarray:
-    """
-    VAD-driven smart recording with ENTER-to-stop fallback.
-
-    Phases
-    ------
-    1. 3-2-1 countdown  (no audio captured yet).
-    2. Calibrate: 0.8 s of ambient audio → estimate noise floor.
-    3. Listen / Record: show live RMS bar while speech is detected.
-    4. Trailing: 1.8 s post-speech silence countdown; speech resumes → cancel.
-    5. Auto-stop OR user presses ENTER.
-
-    Adaptive threshold: if no speech is detected for 5 s, halve the threshold
-    automatically (handles mics with very low gain or quiet speakers).
-
-    Hard cap: 30 s total.
-    Returns float32 mono ndarray at SAMPLE_RATE.
-    """
-    # ── 3-2-1 countdown (no stream yet) ──────────────────────────────────
     print()
     for i in (3, 2, 1):
         print(f"    {i} ...", end="\r", flush=True)
         time.sleep(1)
     print("                        ", end="\r", flush=True)
 
-    # ── Shared state ──────────────────────────────────────────────────────
     frames      = []
     frames_lock = threading.Lock()
-    stop_event  = threading.Event()   # set by keyboard thread or VAD
+    stop_event  = threading.Event()
 
     def _audio_cb(indata, nf, ti, status):
         with frames_lock:
             frames.append(indata.copy())
 
     def _keyboard_watcher():
-        """Daemon thread: pressing ENTER sets stop_event."""
         try:
             if os.name == "nt":
                 sys.stdin.readline()
@@ -188,13 +134,6 @@ def _record_smart(label: str) -> np.ndarray:
     kb_thread = threading.Thread(target=_keyboard_watcher, daemon=True)
     kb_thread.start()
 
-    # ── Phase 1: calibrate noise floor ────────────────────────────────────
-    #
-    # Use the 50th-percentile (median) of 30-ms frame RMS values, then ×3.0.
-    # Median is robust to transient sounds during calibration.
-    # A minimum floor of 0.001 prevents the threshold being set to zero in
-    # an anechoically quiet room.
-    #
     print("  👂  Calibrating ...                                  ",
           end="\r", flush=True)
     time.sleep(_CALIBRATION_SEC)
@@ -212,9 +151,8 @@ def _record_smart(label: str) -> np.ndarray:
         noise_floor = 0.004
 
     speech_thresh   = noise_floor * 3.0
-    adapt_deadline  = time.time() + 5.0   # halve threshold if no speech by then
+    adapt_deadline  = time.time() + 5.0
 
-    # ── Phase 2-5: VAD loop ───────────────────────────────────────────────
     print("  🎙  Speak now  —  auto-stops after silence  [ENTER to finish]  ",
           end="\r", flush=True)
 
@@ -231,16 +169,14 @@ def _record_smart(label: str) -> np.ndarray:
             print(f"\n  ⏹  Max duration ({_MAX_DURATION:.0f}s) reached.             ")
             break
 
-        # Adaptive threshold: if quiet mic / quiet speaker, lower the bar
         if not had_speech and time.time() > adapt_deadline:
             speech_thresh *= 0.5
-            adapt_deadline = time.time() + 5.0   # allow another 5 s before next halving
+            adapt_deadline = time.time() + 5.0
 
         with frames_lock:
             n_now = len(frames)
 
         if n_now > last_frame_idx:
-            # Analyse the 5 most recent 30-ms frames (~150 ms window)
             with frames_lock:
                 recent_slices = frames[max(0, n_now - 5):n_now]
             recent = np.concatenate(recent_slices).squeeze()
@@ -282,12 +218,12 @@ def _record_smart(label: str) -> np.ndarray:
                 print(f"  👂  Waiting for speech {dots:<4}  [ENTER to finish early]  ",
                       end="\r", flush=True)
 
-        time.sleep(0.04)   # ~25 Hz polling
+        time.sleep(0.04)
 
     if stop_event.is_set():
         print(f"\n  ⏹  Stopped by ENTER.                              ")
 
-    stop_event.set()  # Signal keyboard watcher thread to exit if VAD auto-stopped
+    stop_event.set()
     stream.stop()
     stream.close()
 
@@ -300,15 +236,10 @@ def _record_smart(label: str) -> np.ndarray:
 
 
 def _check_quality(audio: np.ndarray) -> tuple:
-    """
-    Quick quality gate.
-    Returns (ok: bool, reason: str).
-    """
     rms_db = 20.0 * np.log10(np.sqrt(np.mean(audio ** 2)) + 1e-10)
     if rms_db < SILENCE_GATE:
         return False, f"Recording too quiet ({rms_db:.0f} dBFS). Please speak louder."
 
-    # Check that at least 20% of frames are voiced
     frame_len = int(SAMPLE_RATE * 0.030)
     n_frames  = len(audio) // frame_len
     if n_frames == 0:
@@ -327,12 +258,7 @@ def _check_quality(audio: np.ndarray) -> tuple:
     return True, f"OK  (RMS: {rms_db:.0f} dBFS, voiced: {voiced_frac:.0%})"
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-#  Main enrollment flow
-# ─────────────────────────────────────────────────────────────────────────────
-
 def run_enrollment(name: str) -> None:
-    """Interactively record 3 scripts and enroll the speaker."""
     from computation.voice.enroll import enroll_speaker, get_profile, list_enrolled
 
     _cls()
@@ -340,7 +266,6 @@ def run_enrollment(name: str) -> None:
     print(f"  Enrolling speaker:  {name}")
     _rule()
 
-    # Check if already enrolled
     existing = get_profile(name)
     if existing:
         n_recs = existing.get("recording_count", 0)
@@ -356,7 +281,6 @@ def run_enrollment(name: str) -> None:
             print("\n  Exiting.\n")
             sys.exit(0)
         elif choice == "a":
-            # Will append to existing recordings
             _run_recording_flow(name, mode="append")
             return
         else:
@@ -366,11 +290,6 @@ def run_enrollment(name: str) -> None:
 
 
 def _extract_hints_from_recordings(name: str) -> dict:
-    """
-    Simple regex scan over any transcripts embedded in the recordings folder.
-    Looks for phrases like 'my city is X', 'I live in X', 'I like X music'.
-    Returns a partial preferences dict (only keys that were found).
-    """
     import re
     hints: dict = {}
 
@@ -378,19 +297,16 @@ def _extract_hints_from_recordings(name: str) -> dict:
     if not rec_dir.exists():
         return hints
 
-    # We look in any .txt transcript files that might live alongside the wavs
     for txt_file in rec_dir.glob("*.txt"):
         try:
             text = txt_file.read_text(encoding="utf-8", errors="ignore").lower()
         except OSError:
             continue
 
-        # City hint
         m = re.search(r"(?:my city is|i live in|i am from|from)\s+([A-Za-z\s]+?)(?:\.|,|$)", text)
         if m and "city" not in hints:
             hints["city"] = m.group(1).strip().title()
 
-        # Music genre hint
         m = re.search(r"i (?:like|love|enjoy|prefer)\s+([A-Za-z\-]+)\s+music", text)
         if m and "favorite_genre" not in hints:
             hints["favorite_genre"] = m.group(1).strip().title()
@@ -399,15 +315,10 @@ def _extract_hints_from_recordings(name: str) -> dict:
 
 
 def _ask_personalization(name: str, profile: dict) -> None:
-    """
-    Ask 3 quick personalization questions and persist the answers to database.canary_db.
-    Optionally pre-fills defaults from recording transcript hints.
-    """
     import sys
     sys.path.insert(0, str(Path(__file__).parent))
     import canary_db
 
-    # Try to pre-fill from any transcript hints in recordings
     hints = _extract_hints_from_recordings(name)
 
     _rule()
@@ -416,7 +327,6 @@ def _ask_personalization(name: str, profile: dict) -> None:
     print()
     print("  ─────────────────────────────────────────────────────────────────")
 
-    # Q1 — city
     default_city = hints.get("city", "Bengaluru")
     city_input = input(
         f"  1. What city are you in? (used for weather & news)  [{default_city}]\n"
@@ -424,7 +334,6 @@ def _ask_personalization(name: str, profile: dict) -> None:
     ).strip()
     city = city_input if city_input else default_city
 
-    # Q2 — news country / region
     default_news = "India"
     news_input = input(
         f"\n  2. What's your preferred news region? (e.g. India, US, UK, global)  [{default_news}]\n"
@@ -432,7 +341,6 @@ def _ask_personalization(name: str, profile: dict) -> None:
     ).strip()
     news_country = news_input if news_input else default_news
 
-    # Q3 — music genre
     default_genre = hints.get("favorite_genre", "Pop")
     genre_input = input(
         f"\n  3. What's your favourite music genre?  (e.g. Pop, Rock, Jazz, Hip-Hop, Classical)  [{default_genre}]\n"
@@ -460,7 +368,6 @@ def _ask_personalization(name: str, profile: dict) -> None:
 
 
 def _run_recording_flow(name: str, mode: str = "replace") -> None:
-    """Record 3 scripts, save them, then call enroll_speaker."""
     from computation.voice.enroll import enroll_speaker, _recordings_dir, _speaker_dir
 
     voices_root = Path(__file__).parent / "database" / "Voices"
@@ -469,12 +376,10 @@ def _run_recording_flow(name: str, mode: str = "replace") -> None:
     rec_dir = spk_dir / "recordings"
     rec_dir.mkdir(exist_ok=True)
 
-    # Determine starting index for recordings
     if mode == "append":
         existing = sorted(rec_dir.glob("sample_*.wav"))
         start_idx = len(existing) + 1
     else:
-        # Replace mode: clear existing recordings
         for f in rec_dir.glob("sample_*.wav"):
             f.unlink()
         start_idx = 1
@@ -488,7 +393,6 @@ def _run_recording_flow(name: str, mode: str = "replace") -> None:
         print(f"  💡  {script['instruction']}")
         print()
         print("  ┌─────────────────────────────────────────────────────┐")
-        # Word-wrap the script text at ~55 chars
         words  = script["text"].split()
         line   = ""
         for word in words:
@@ -512,7 +416,6 @@ def _run_recording_flow(name: str, mode: str = "replace") -> None:
 
             if ok:
                 _ok(f"Quality check passed — {reason}")
-                # Save to disk
                 sample_num = start_idx + script_idx - 1
                 dest       = rec_dir / f"sample_{sample_num}.wav"
                 sf.write(str(dest), audio, SAMPLE_RATE, subtype="PCM_16")
@@ -536,7 +439,6 @@ def _run_recording_flow(name: str, mode: str = "replace") -> None:
 
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        # Pass empty list — enroll_speaker will pick up recordings/ automatically
         profile = enroll_speaker(name, [])
 
     _rule()
@@ -548,16 +450,11 @@ def _run_recording_flow(name: str, mode: str = "replace") -> None:
     print(f"  Profile     : Voices/{name}/profile.json")
     print()
 
-    # ── Personalization questions ──────────────────────────────────────────
     _ask_personalization(name, profile)
 
     print("  Run  python3 run_canary.py  to use speaker identification.")
     print()
 
-
-# ─────────────────────────────────────────────────────────────────────────────
-#  CLI entry point
-# ─────────────────────────────────────────────────────────────────────────────
 
 def main():
     parser = argparse.ArgumentParser(
@@ -580,7 +477,6 @@ Examples:
 
     args = parser.parse_args()
 
-    # ── List mode ─────────────────────────────────────────────────────────
     if args.list:
         from computation.voice.enroll import list_enrolled, get_profile
         _banner()
@@ -601,7 +497,6 @@ Examples:
         print()
         sys.exit(0)
 
-    # ── Rebuild mode ──────────────────────────────────────────────────────
     if args.rebuild:
         from computation.voice.enroll import rebuild_all_profiles
         _banner()
@@ -612,9 +507,6 @@ Examples:
         print("\n  Done.\n")
         sys.exit(0)
 
-    # ── Interactive / named enrollment ────────────────────────────────────
-    # NOTE: run_enrollment() calls _cls() + _banner() itself.
-    # Do NOT call _banner() here — it would print twice.
 
     if args.name:
         name = args.name.strip()
@@ -626,8 +518,6 @@ Examples:
             _err("No name provided. Exiting.")
             sys.exit(1)
 
-    # Capitalise each word so multi-word names look right
-    # e.g. "mother dear" → "Mother Dear",  "hemang" → "Hemang"
     name = " ".join(w[0].upper() + w[1:] for w in name.split() if w)
 
     run_enrollment(name)

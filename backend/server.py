@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-"""Run: python3 -m backend.server"""
 import uvicorn
 from backend.api import app
 

@@ -1,0 +1,34 @@
+# Python
+.venv/
+venv/
+__pycache__/
+**/__pycache__/
+*.pyc
+.pytest_cache/
+
+# Node / frontend build artifacts (web image builds its own)
+frontend/web/node_modules/
+frontend/web/.next/
+frontend/mobile/node_modules/
+frontend/mobile/.expo/
+
+# Large data not needed at runtime
+models/MiniLibriMix/
+models/MiniLibriMix.zip
+data/
+outputs/
+*.wav
+*.mp3
+
+# Local DB + enrolled voices (mounted as a volume instead)
+database/canary.db
+database/Voices/
+
+# Git / misc
+.git/
+.gitignore
+*.pdf
+response.json
+.DS_Store
+docs/
+contextRetrieval/

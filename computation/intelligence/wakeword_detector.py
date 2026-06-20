@@ -1,26 +1,3 @@
-"""
-context_engine/wakeword_detector.py
-=====================================
-Weighted Phonetic Wakeword Detector.
-
-Default mode (Canary):
-    Exact match against _CANARY_WAKEWORDS + fallback to _CANARY_FUZZY_MAP.
-    Zero external dependencies. Works out-of-the-box, unchanged from before.
-
-Custom wakeword mode (after running change_wakeword.py):
-    Loads wakeword/wakeword_config.json written by the C++ engine.
-    Uses the pre-computed lookup_table for O(1) fast dict lookup.
-    For novel tokens not in the table: calls the C++ binary via subprocess
-    for a live weighted-DP similarity score.
-
-Architecture:
-    Hot path  → dict lookup  (< 1 µs)
-    Cold path → C++ subprocess (< 5 ms, only for unseen tokens)
-
-How to trigger custom mode:
-    python3 change_wakeword.py        ← records + builds wakeword_config.json
-    python3 change_wakeword.py --reset ← deletes config, reverts to Canary
-"""
 
 from __future__ import annotations
 
@@ -28,9 +5,6 @@ import json
 import subprocess
 from pathlib import Path
 
-# ─────────────────────────────────────────────────────────────────────────────
-#  CANARY DEFAULTS  (unchanged — these run when no custom config is present)
-# ─────────────────────────────────────────────────────────────────────────────
 _CANARY_WAKEWORDS: list[str] = [
     "hello, canary",
     "hello canary",
@@ -46,15 +20,12 @@ _CANARY_WAKEWORDS: list[str] = [
     "canary",
 ]
 
-# Common Whisper mis-transcriptions of "Canary"
 _CANARY_FUZZY_MAP: dict[str, float] = {
-    # 0.80 — extremely close phonetic/spelling variants
     "canari":      0.80,
     "canarie":     0.80,
     "canaries":    0.80,
     "canree":      0.80,
     "canry":       0.80,
-    # 0.75 — direct vowel shifts / common distortions
     "canara":      0.75,
     "canaras":     0.75,
     "canaria":     0.75,
@@ -62,12 +33,10 @@ _CANARY_FUZZY_MAP: dict[str, float] = {
     "kannary":     0.75,
     "kenary":      0.75,
     "kennary":     0.75,
-    # 0.70 — consonant substitutions (K/Q)
     "kanari":      0.70,
     "kenari":      0.70,
     "qanari":      0.70,
     "qanary":      0.70,
-    # 0.65 — double consonant / G/C shifts
     "canere":      0.65,
     "canerie":     0.65,
     "canery":      0.65,
@@ -84,7 +53,6 @@ _CANARY_FUZZY_MAP: dict[str, float] = {
     "kannery":     0.65,
     "konari":      0.65,
     "konary":      0.65,
-    # 0.60 — more distant phonetic matches
     "camari":      0.60,
     "camary":      0.60,
     "camry":       0.60,
@@ -113,19 +81,15 @@ _CANARY_FUZZY_MAP: dict[str, float] = {
     "kinari":      0.60,
     "kinary":      0.60,
     "kinery":      0.60,
-    # 0.55 — dropped initial consonant / weak phonetic match
     "anari":       0.55,
     "anary":       0.55,
     "unari":       0.55,
     "unary":       0.55,
-    # ── C++ Weighted Phonetic Engine scored variants ─────────────────────
-    # Scores from: ./wakeword/build/wakeword_matcher --benchmark canary
-    # These override the old conservative 0.65 scores above
-    "cannery":     0.979,   # /kænəri/ → double-n + er, very common mishear
+    "cannery":     0.979,
     "canerie":     0.975,
     "canere":      0.975,
-    "cenary":      0.983,   # c+a→ce vowel shift
-    "kennedy":     0.807,   # can→ken (c→k, a→e) + ary→edy  (accent + vowel)
+    "cenary":      0.983,
+    "kennedy":     0.807,
     "kinnedy":     0.775,
     "cannedy":     0.790,
     "conary":      0.975,
@@ -142,9 +106,9 @@ _CANARY_FUZZY_MAP: dict[str, float] = {
     "kenery":      0.950,
     "kenari":      0.950,
     "kenarie":     0.940,
-    "kenary":      0.975,   # already above at 0.75 — raise to engine score
-    "cannary":     0.986,   # double-n: "canary"→"cannary"
-    "kannary":     0.979,   # k+double-n
+    "kenary":      0.975,
+    "cannary":     0.986,
+    "kannary":     0.979,
     "kannery":     0.971,
     "kennery":     0.971,
     "kennary":     0.971,
@@ -156,20 +120,11 @@ _CANARY_FUZZY_MAP: dict[str, float] = {
 }
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-#  CUSTOM CONFIG LOADER
-#  Reads wakeword/wakeword_config.json written by change_wakeword.py.
-#  Falls back to default_wakeword_config.json in the root directory.
-# ─────────────────────────────────────────────────────────────────────────────
 _CONFIG_PATH   = Path(__file__).parent.parent / "wakeword" / "wakeword_config.json"
 _DEFAULT_PATH  = Path(__file__).parent.parent.parent / "default_wakeword_config.json"
 _BINARY_PATH   = Path(__file__).parent.parent / "wakeword" / "build" / "wakeword_matcher"
 
 def _load_custom_config() -> dict | None:
-    """
-    Load wakeword_config.json from the custom path if it exists.
-    Otherwise, fall back to default_wakeword_config.json in the root directory.
-    """
     path = _CONFIG_PATH if _CONFIG_PATH.exists() else _DEFAULT_PATH
     if not path.exists():
         return None
@@ -184,23 +139,15 @@ def _load_custom_config() -> dict | None:
 
 
 def _build_custom_wakewords(word: str) -> list[str]:
-    """
-    Build the exact-match wakeword list for a custom word.
-    Covers common greeting prefixes (hey, ok, hi, hello, yo).
-    """
     prefixes = ["hey", "ok", "hi", "hello", "yo", "okay", "hey,",
                 "ok,", "hi,", "yo,", "hello,", "okay,"]
     phrases = [word]
     for p in prefixes:
         phrases.append(f"{p} {word}")
-    # longest-first so prefix variants don't shadow the bare word
     phrases.sort(key=len, reverse=True)
     return phrases
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-#  MODULE-LEVEL INIT  (runs once on import)
-# ─────────────────────────────────────────────────────────────────────────────
 _custom_cfg = _load_custom_config()
 
 if _custom_cfg:
@@ -217,7 +164,6 @@ else:
     _IS_CANARY        = True
 
 def reload_config() -> None:
-    """Reloads the custom wakeword configuration into module-level variables dynamically."""
     global _ACTIVE_WORD, _ACTIVE_WAKEWORDS, _ACTIVE_FUZZY, _ACTIVE_THRESHOLD, _IS_CANARY
     cfg = _load_custom_config()
     if cfg:
@@ -234,16 +180,7 @@ def reload_config() -> None:
         _IS_CANARY = True
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-#  C++ COLD-PATH LOOKUP
-#  Called only for custom wakeword mode AND a token that isn't in the table.
-#  Returns confidence [0.0, 1.0].
-# ─────────────────────────────────────────────────────────────────────────────
 def _cpp_similarity(wakeword: str, token: str) -> float:
-    """
-    Call the C++ wakeword_matcher binary for a live weighted-DP score.
-    Returns 0.0 on any failure (safe degradation to rejection).
-    """
     if not _BINARY_PATH.exists():
         return 0.0
     try:
@@ -258,33 +195,11 @@ def _cpp_similarity(wakeword: str, token: str) -> float:
         return 0.0
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-#  PUBLIC API
-# ─────────────────────────────────────────────────────────────────────────────
 def detect_wakeword(text: str) -> dict:
-    """
-    Detect whether the utterance contains the active wakeword.
-
-    Detection strategy:
-      1. Exact match against _ACTIVE_WAKEWORDS list       → confidence 1.0
-      2. Fast dict lookup in _ACTIVE_FUZZY (lookup_table) → confidence from table
-      3. (Custom mode only) C++ DP call for unseen tokens → live confidence score
-
-    Returns
-    -------
-    {
-        "wakeword":            bool,
-        "wakeword_confidence": float,   # 1.0 exact / scored / 0.0 none
-        "matched_phrase":      str | None
-    }
-    """
-    # Force dynamic sync of wakeword configuration (fixes multi-worker or out-of-sync state)
     reload_config()
 
     lower = text.lower().strip()
 
-    # ── 1. Exact match ────────────────────────────────────────────────────
-    print(f"DEBUG: detect_wakeword({text!r}) | ACTIVE_WORD={_ACTIVE_WORD} | THRESH={_ACTIVE_THRESHOLD} | IS_CANARY={_IS_CANARY}")
     for phrase in _ACTIVE_WAKEWORDS:
         if phrase in lower:
             return {
@@ -293,22 +208,30 @@ def detect_wakeword(text: str) -> dict:
                 "matched_phrase":      phrase,
             }
 
-    # ── 2. Fast dict lookup (hot path) ────────────────────────────────────
-    # Check every whitespace-separated token against the lookup table
     tokens = lower.split()
     for token in tokens:
-        # strip leading/trailing punctuation from token
         clean = token.strip(".,!?;:\"'")
         if clean in _ACTIVE_FUZZY:
             conf = float(_ACTIVE_FUZZY[clean])
             if conf >= _ACTIVE_THRESHOLD:
-                return {
-                    "wakeword":            True,
-                    "wakeword_confidence": conf,
-                    "matched_phrase":      f"~{clean}",
-                }
+                return {"wakeword": True, "wakeword_confidence": conf,
+                        "matched_phrase": f"~{clean}"}
 
-    # Also try bigrams (handles split transcriptions like "can ary")
+        if len(clean) > len(_ACTIVE_WORD) + 1:
+            for start in range(len(clean) - len(_ACTIVE_WORD) + 1):
+                sub = clean[start: start + len(_ACTIVE_WORD) + 1]
+                if sub in _ACTIVE_FUZZY:
+                    conf = float(_ACTIVE_FUZZY[sub])
+                    if conf >= _ACTIVE_THRESHOLD:
+                        return {"wakeword": True, "wakeword_confidence": conf,
+                                "matched_phrase": f"~{sub}"}
+                sub2 = clean[start: start + len(_ACTIVE_WORD)]
+                if sub2 in _ACTIVE_FUZZY:
+                    conf = float(_ACTIVE_FUZZY[sub2])
+                    if conf >= _ACTIVE_THRESHOLD:
+                        return {"wakeword": True, "wakeword_confidence": conf,
+                                "matched_phrase": f"~{sub2}"}
+
     for i in range(len(tokens) - 1):
         bigram = tokens[i].strip(".,!?") + tokens[i+1].strip(".,!?")
         if bigram in _ACTIVE_FUZZY:
@@ -320,14 +243,11 @@ def detect_wakeword(text: str) -> dict:
                     "matched_phrase":      f"~{bigram}",
                 }
 
-    # ── 3. C++ cold-path then Python difflib fallback (custom mode only) ──
     if not _IS_CANARY:
         for token in tokens:
             clean = token.strip(".,!?;:\"'")
             if len(clean) >= 2:
-                # Try C++ binary first
                 conf = _cpp_similarity(_ACTIVE_WORD, clean)
-                # Fallback: Python difflib similarity when binary not available
                 if conf == 0.0:
                     import difflib
                     conf = difflib.SequenceMatcher(
@@ -339,7 +259,6 @@ def detect_wakeword(text: str) -> dict:
                         "matched_phrase":      f"~{clean}",
                     }
 
-    # ── No match ──────────────────────────────────────────────────────────
     return {
         "wakeword":            False,
         "wakeword_confidence": 0.0,
@@ -348,17 +267,6 @@ def detect_wakeword(text: str) -> dict:
 
 
 def get_active_wakeword() -> str:
-    """
-    Returns the currently active wakeword.
-
-    Always reads the config files fresh so changes made by /api/change-wakeword
-    are reflected immediately without restarting the server.
-
-    Priority:
-      1. computation/wakeword/wakeword_config.json  — if it exists AND has a word
-      2. default_wakeword_config.json in project root
-      3. "canary" hardcoded fallback
-    """
     for path in (_CONFIG_PATH, _DEFAULT_PATH):
         if path.exists():
             try:
@@ -372,5 +280,4 @@ def get_active_wakeword() -> str:
 
 
 def is_canary_default() -> bool:
-    """Returns True if running on Canary defaults (no custom config loaded)."""
     return _IS_CANARY

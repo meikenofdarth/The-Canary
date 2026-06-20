@@ -1,0 +1,64 @@
+{
+  "timestamp": "2026-06-20T16:54:53.278783",
+  "session_dir": "outputs/20260620_165437",
+  "drs_mode": "A",
+  "scene": {
+    "speaker_count": 1,
+    "complexity": 0.157,
+    "noise_level": 0.525,
+    "simul_speech": 0.0
+  },
+  "speakers": [
+    {
+      "id": "speaker_1",
+      "status": "READY",
+      "transcript": "canary, how are you? what is the weather in my city?",
+      "wakeword": true,
+      "wakeword_confidence": 1.0,
+      "wakeword_phrase": "canary",
+      "type": "COMMAND",
+      "type_confidence": 0.95,
+      "identity": "Sanchit",
+      "identity_confidence": 0.6368,
+      "known_user": true,
+      "start_time": 1.24,
+      "intent_result": {
+        "domain": "WEATHER",
+        "polarity": "POSITIVE",
+        "confidence": 0.55,
+        "entities": {},
+        "raw_signals": [
+          "weather"
+        ],
+        "original_text": "canary, how are you? what is the weather in my city?"
+      }
+    }
+  ],
+  "wakeword_count": 1,
+  "command_count": 1,
+  "conflict": false,
+  "conflict_pair": null,
+  "route": "EXECUTE",
+  "arbitration": {
+    "winner": "speaker_1",
+    "route": "EXECUTE",
+    "reason": "Sanchit issued the only wakeword command. Priority: 0.85.",
+    "speakers": [
+      {
+        "id": "speaker_1",
+        "identity": "Sanchit",
+        "identity_confidence": 0.6368,
+        "known_user": true,
+        "wakeword": true,
+        "wakeword_confidence": 1.0,
+        "transcript": "canary, how are you? what is the weather in my city?",
+        "type": "COMMAND",
+        "separation_quality": 1.0,
+        "identity_note": "",
+        "start_time": 1.24,
+        "priority": 0.8547,
+        "intent": "WEATHER"
+      }
+    ]
+  }
+}

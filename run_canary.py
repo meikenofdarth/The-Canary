@@ -1,15 +1,6 @@
 #!/usr/bin/env python3
-"""
-run_canary.py  –  The Canary Speaker Separation
-================================================
-Run:  python3 run_canary.py
 
-Two smart paths:
-  • 1 speaker  → direct enhancement of raw recording (no SepFormer artifacts)
-  • 2 speakers → SepFormer separation + per-stream enhancement
-"""
-
-import sys, time, datetime, warnings
+import sys, time, datetime, warnings, threading
 import numpy as np
 import sounddevice as sd
 import soundfile as sf
@@ -22,9 +13,6 @@ DURATION    = 7
 MODEL_CACHE = "pretrained_models"
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-#  RECORD
-# ─────────────────────────────────────────────────────────────────────────────
 def record(sr=SAMPLE_RATE):
     from computation.audio.vad_segmenter import record_until_silence
     raw = record_until_silence(
@@ -35,22 +23,13 @@ def record(sr=SAMPLE_RATE):
     return raw, sr
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-#  SHARED HELPERS
-# ─────────────────────────────────────────────────────────────────────────────
 def _highpass(sig, cutoff=80.0, sr=SAMPLE_RATE):
-    """Remove DC and sub-bass rumble below cutoff Hz."""
     from scipy.signal import butter, sosfilt
     sos = butter(2, cutoff, btype="highpass", fs=sr, output="sos")
     return sosfilt(sos, sig)
 
 
 def _presence_boost(sig, shelf_freq=2000.0, gain_db=3.5, sr=SAMPLE_RATE):
-    """
-    High-frequency shelf boost above shelf_freq Hz.
-    Restores crispness lost in SepFormer's 8kHz internal SR round-trip,
-    and adds air/presence to single-speaker recordings.
-    """
     from scipy.signal import butter, sosfilt
     shelf_gain = 10 ** (gain_db / 20.0)
     lp  = butter(2, shelf_freq, btype="lowpass", fs=sr, output="sos")
@@ -60,18 +39,13 @@ def _presence_boost(sig, shelf_freq=2000.0, gain_db=3.5, sr=SAMPLE_RATE):
 
 
 def _soft_compress(sig, threshold_db=-18.0, ratio=3.0, sr=SAMPLE_RATE):
-    """
-    Soft-knee dynamic range compressor.
-    Brings up quiet speech without touching loud peaks.
-    attack=5ms, release=150ms, knee=6dB.
-    """
     threshold  = 10 ** (threshold_db / 20.0)
     knee_db    = 6.0
     knee_lower = 10 ** ((threshold_db - knee_db / 2) / 20.0)
     knee_upper = 10 ** ((threshold_db + knee_db / 2) / 20.0)
 
-    attack_coef  = np.exp(-1.0 / (0.005 * sr))   # 5 ms
-    release_coef = np.exp(-1.0 / (0.150 * sr))   # 150 ms
+    attack_coef  = np.exp(-1.0 / (0.005 * sr))
+    release_coef = np.exp(-1.0 / (0.150 * sr))
 
     env    = 0.0
     gain   = 1.0
@@ -79,17 +53,14 @@ def _soft_compress(sig, threshold_db=-18.0, ratio=3.0, sr=SAMPLE_RATE):
 
     for n, x in enumerate(sig):
         level = abs(x)
-        # envelope follower
         if level > env:
             env = attack_coef  * env + (1 - attack_coef)  * level
         else:
             env = release_coef * env + (1 - release_coef) * level
 
-        # soft-knee gain computation
         if env <= knee_lower:
             gain = 1.0
         elif env <= knee_upper:
-            # interpolate in knee region
             t    = (env - knee_lower) / (knee_upper - knee_lower)
             gain = 1.0 + (1.0 / ratio - 1.0) * t * t
         else:
@@ -101,22 +72,12 @@ def _soft_compress(sig, threshold_db=-18.0, ratio=3.0, sr=SAMPLE_RATE):
 
 
 def _normalize(sig, target_rms_db=-18.0, peak_limit_db=-1.0):
-    """
-    Loudness normalization: targets a comfortable RMS level (-18 dBFS)
-    rather than just peak normalization.
-
-    This is what makes a -34 dBFS quiet recording jump to a loud,
-    clear -18 dBFS without any distortion — pure gain, no clipping.
-    A hard peak limiter at -1 dBFS prevents any overflow.
-    """
     rms = np.sqrt(np.mean(sig.astype(np.float64) ** 2))
     if rms < 1e-8:
         return sig
-    # How much gain do we need to reach target RMS?
     gain_db = target_rms_db - 20.0 * np.log10(rms)
     gain    = 10 ** (gain_db / 20.0)
     sig     = sig * gain
-    # Hard-limit peak so we never clip
     peak_limit = 10 ** (peak_limit_db / 20.0)
     peak       = np.max(np.abs(sig))
     if peak > peak_limit:
@@ -140,12 +101,6 @@ def _denoise(sig, sr, prop_decrease, stationary=False,
 
 
 def si_snr(estimate: np.ndarray, reference: np.ndarray) -> float:
-    """
-    Scale-Invariant Signal-to-Noise Ratio (dB).
-    Measures how well `estimate` reconstructs `reference`.
-    Higher = better separation quality.
-    Formula: SI-SNR = 10 * log10( ||s_target||² / ||e_noise||² )
-    """
     ref = reference.astype(np.float64) - np.mean(reference)
     est = estimate.astype(np.float64)  - np.mean(estimate)
     alpha  = np.dot(est, ref) / (np.dot(ref, ref) + 1e-10)
@@ -156,69 +111,38 @@ def si_snr(estimate: np.ndarray, reference: np.ndarray) -> float:
     ))
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-#  PATH A – SINGLE SPEAKER  (direct enhancement, no SepFormer involved)
-# ─────────────────────────────────────────────────────────────────────────────
 def enhance_single(raw, sr):
-    """
-    Full enhancement pipeline for a single-speaker recording.
-    No separation needed — we work directly on the raw signal so there
-    are zero separation artifacts to work around.
-
-    Steps:
-      1.  High-pass 80 Hz       — removes rumble / DC
-      2a. Non-stationary denoise pass 1 (prop=0.55, wide FFT)
-          — removes broadband background noise adaptively
-      2b. Non-stationary denoise pass 2 (prop=0.40, narrower FFT)
-          — targeted residual clean in speech band
-      3.  Presence boost +3.5 dB above 2 kHz
-          — adds crispness and intelligibility
-      4.  Soft-knee compressor (thresh=-18 dB, ratio 3:1)
-          — brings up quiet moments, evens out volume
-      5.  Normalise to -3 dBFS
-    """
     sig = raw.astype(np.float64)
 
-    # 1. Remove rumble
     sig = _highpass(sig, cutoff=80.0, sr=sr)
 
-    # 2a. Broad noise sweep (targets stationary hiss, fan noise, etc.)
     sig = _denoise(sig, sr,
                    prop_decrease=0.55,
                    stationary=False,
                    n_fft=2048, hop=512,
                    t_smooth=120, f_smooth=200).astype(np.float64)
 
-    # 2b. Residual clean in speech band — gentler, adaptive
     sig = _denoise(sig, sr,
                    prop_decrease=0.40,
                    stationary=False,
                    n_fft=1024, hop=256,
                    t_smooth=60, f_smooth=400).astype(np.float64)
 
-    # 3. Presence boost — speech clarity
     sig = _presence_boost(sig, shelf_freq=2000.0, gain_db=3.5, sr=sr)
 
-    # 4. Soft compressor — even out dynamics
     sig = _soft_compress(sig.astype(np.float32), threshold_db=-18.0,
                          ratio=3.0, sr=sr).astype(np.float64)
 
-    # 5. Normalise
-    sig = _normalize(sig)   # RMS loudness to -18 dBFS, peak limited at -1 dBFS
+    sig = _normalize(sig)
     return sig.astype(np.float32)
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-#  SPEAKER DETECTION  (runs SepFormer, checks if 1 or 2 real speakers)
-# ─────────────────────────────────────────────────────────────────────────────
 def _light_denoise_for_sep(audio, sr):
-    """Very light denoise before feeding to SepFormer — preserve signal shape."""
     sig = _denoise(audio, sr,
                    prop_decrease=0.25,
                    stationary=False,
                    n_fft=2048, hop=512,
                    t_smooth=150, f_smooth=200)
-    # restore original peak
     orig_peak = np.max(np.abs(audio))
     peak = np.max(np.abs(sig))
     if peak > 1e-6:
@@ -227,23 +151,16 @@ def _light_denoise_for_sep(audio, sr):
 
 
 def _apply_vad_gate(audio: np.ndarray, sr: int, frame_ms: int = 30) -> np.ndarray:
-    """
-    Zero out non-speech regions in the audio to prevent background noise
-    and artifacts from contaminating the separation model.
-    """
     frame_len = max(1, int(sr * frame_ms / 1000))
     n_frames = len(audio) // frame_len
     if n_frames == 0:
         return audio.copy()
 
-    # Calculate RMS for each frame
     rms_frames = np.array([
         np.sqrt(np.mean(audio[i * frame_len:(i + 1) * frame_len] ** 2))
         for i in range(n_frames)
     ])
-    # Noise floor = 10th percentile
     noise_floor = float(np.percentile(rms_frames, 10)) + 1e-10
-    # Slightly sensitive threshold to preserve weak/onset speech components
     voiced_frames = rms_frames > noise_floor * 2.5
 
     gated_audio = audio.copy()
@@ -254,46 +171,91 @@ def _apply_vad_gate(audio: np.ndarray, sr: int, frame_ms: int = 30) -> np.ndarra
     return gated_audio
 
 
-def _run_sepformer(audio, sr, n_mix: int = 2):
-    """
-    Run SepFormer-libri{n_mix}mix.
-    n_mix=2  → speechbrain/sepformer-libri2mix  (2 output streams)
-    n_mix=3  → speechbrain/sepformer-libri3mix  (3 output streams)
-    """
-    import torch, torchaudio, logging
-    logging.getLogger("speechbrain").setLevel(logging.ERROR)
+_SEP_MODELS: dict = {}
+_SEP_LOCK = threading.Lock()
 
-    model_id = f"sepformer-libri{n_mix}mix"
-    MODEL_SR  = 8000
 
-    # VAD before separation: run only on speech regions to reduce artifacts/bleeding
-    audio_gated = _apply_vad_gate(audio, sr)
+def _get_separation_model(model_id: str):
+    model = _SEP_MODELS.get(model_id)
+    if model is not None:
+        return model
 
-    audio_8k  = torchaudio.functional.resample(
-        torch.from_numpy(audio_gated).unsqueeze(0), sr, MODEL_SR)
+    with _SEP_LOCK:
+        model = _SEP_MODELS.get(model_id)
+        if model is not None:
+            return model
 
-    from speechbrain.inference.separation import SepformerSeparation
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        model = SepformerSeparation.from_hparams(
-            source=f"speechbrain/{model_id}",
-            savedir=f"{MODEL_CACHE}/{model_id}",
-            run_opts={"device": "cpu"},
-        )
+        import torch
+        original_load = torch.load
+        def _patched_load(*args, **kwargs):
+            kwargs["weights_only"] = False
+            return original_load(*args, **kwargs)
+        torch.load = _patched_load
+        try:
+            from asteroid.models import BaseModel
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                model = BaseModel.from_pretrained(model_id)
+                model.eval()
+        finally:
+            torch.load = original_load
 
-    with torch.no_grad():
-        est = model.separate_batch(audio_8k)   # (1, T_8k, n_mix)
+        _SEP_MODELS[model_id] = model
 
-    streams = []
-    for i in range(n_mix):
-        s8 = est[0, :, i].cpu().numpy()
-        s  = torchaudio.functional.resample(
-            torch.from_numpy(s8).unsqueeze(0), MODEL_SR, sr
+    return model
+
+
+def warmup_separation() -> None:
+    _get_separation_model("JorisCos/ConvTasNet_Libri2Mix_sepnoisy_16k")
+
+
+def _run_separation(audio, sr, n_mix: int = 2):
+    from computation.audio.separator import separate_waveform, _MODEL_SR
+    import torch, torchaudio
+    frame = max(1, int(sr * 0.030))
+    nf = len(audio) // frame
+    if nf >= 2:
+        rms = np.array([np.sqrt(np.mean(audio[i*frame:(i+1)*frame]**2)) for i in range(nf)])
+        snr_db = 20.0 * np.log10((np.percentile(rms, 90) + 1e-10) / (np.percentile(rms, 25) + 1e-10))
+        variant = "noisy" if snr_db < 18.0 else "clean"
+    else:
+        variant = "clean"
+    work = audio.astype(np.float32)
+    if sr != _MODEL_SR:
+        work = torchaudio.functional.resample(
+            torch.from_numpy(work).unsqueeze(0), sr, _MODEL_SR
         ).squeeze(0).numpy()
-        if len(s) > len(audio):   s = s[:len(audio)]
-        elif len(s) < len(audio): s = np.pad(s, (0, len(audio) - len(s)))
+    streams_16k = separate_waveform(work, variant=variant, device="cpu")
+    streams = []
+    for s in streams_16k:
+        if _MODEL_SR != sr:
+            s = torchaudio.functional.resample(
+                torch.from_numpy(s).unsqueeze(0), _MODEL_SR, sr
+            ).squeeze(0).numpy()
+        if len(s) > len(audio):    s = s[:len(audio)]
+        elif len(s) < len(audio):  s = np.pad(s, (0, len(audio) - len(s)))
         streams.append(s.astype(np.float32))
     return streams
+
+
+def mixture_consistency_scaled(streams: list, mix) -> list:
+    n = len(streams)
+    if n < 2:
+        return streams
+    L = min(len(mix), min(len(s) for s in streams))
+    m = mix[:L].astype(np.float64)
+    st = [s[:L].astype(np.float64) for s in streams]
+    S = np.sum(st, axis=0)
+    g = float(np.dot(m, S) / (np.dot(S, S) + 1e-10))
+    st = [g * s for s in st]
+    residual = (m - np.sum(st, axis=0)) / n
+    out = [(s + residual).astype(np.float32) for s in st]
+    fixed = []
+    for orig, proj in zip(streams, out):
+        if len(orig) > L:
+            proj = np.concatenate([proj, orig[L:].astype(np.float32)])
+        fixed.append(proj.astype(np.float32))
+    return fixed
 
 
 def _speech_band_rms(audio, sr, lo=300, hi=3400):
@@ -303,14 +265,6 @@ def _speech_band_rms(audio, sr, lo=300, hi=3400):
 
 
 def _reduce_crosstalk(streams: list) -> list:
-    """
-    Gram-Schmidt cross-talk suppression between separated streams.
-
-    SepFormer almost always leaves some bleed-through: a little of speaker B
-    leaks into the speaker A stream and vice-versa.  This function removes
-    the linear projection of each stream onto every other stream, making the
-    outputs orthogonal.  Peak level is preserved so no loudness change occurs.
-    """
     if len(streams) < 2:
         return streams
     clean = [s.astype(np.float64) for s in streams]
@@ -331,15 +285,6 @@ def _reduce_crosstalk(streams: list) -> list:
 
 def _temporal_overlap(s1: np.ndarray, s2: np.ndarray, sr: int,
                       frame_ms: int = 30) -> float:
-    """
-    Fraction of time both streams have active speech simultaneously.
-
-      0.00 = pure turn-taking (speakers never talk at the same time)
-      1.00 = both always talking at once (fully overlapping speech)
-
-    Uses the same energy-VAD logic as the pre-screening gate:
-    voiced = frame RMS > 3 × noise floor (10th percentile).
-    """
     frame_len = max(1, int(sr * frame_ms / 1000))
     n = min(len(s1), len(s2)) // frame_len
     if n == 0:
@@ -361,56 +306,33 @@ def _temporal_overlap(s1: np.ndarray, s2: np.ndarray, sr: int,
 
 
 def detect_and_separate(raw, sr):
-    """
-    2-speaker auto-detection using SepFormer-libri2mix.
-    Calibrated on 10 real recordings — default path, unchanged.
+    from computation.audio.separator import is_ghost_split
 
-    Returns (n_speakers, streams_list).
-      n_speakers==1 → streams_list is empty (caller uses raw directly)
-      n_speakers==2 → streams_list has 2 separated numpy arrays
-    """
     mix     = _light_denoise_for_sep(raw, sr)
-    streams = _run_sepformer(mix, sr, n_mix=2)
+    streams = _run_separation(mix, sr, n_mix=2)
+
+    if is_ghost_split(streams, sr):
+        return 1, []
 
     corr  = float(np.corrcoef(streams[0], streams[1])[0, 1])
     sb    = [_speech_band_rms(s, sr) for s in streams]
     ratio = min(sb) / (max(sb) + 1e-10)
 
-    if abs(corr) < 0.03:   # clearly 2 independent sources
+    if abs(corr) < 0.03:
         return 2, streams
-    if abs(corr) > 0.80:   # same source
+    if abs(corr) > 0.80:
         return 1, []
     return (2, streams) if ratio >= 0.35 else (1, [])
 
 
 def detect_and_separate_3spk(raw, sr):
-    """
-    3-speaker mode using SepFormer-libri3mix.
-    Downloads speechbrain/sepformer-libri3mix on first use (~same size as libri2mix).
-
-    SepFormer-libri3mix always produces 3 output streams.
-    Real speaker streams are identified by speech-band RMS:
-      - Reference = loudest stream's speech-band RMS
-      - Any stream with RMS ≥ 25% of reference → real speaker
-      - Any stream with RMS <  25% of reference → ghost/artifact → discarded
-
-    Returns (n_real_speakers, real_streams).
-    n_real_speakers is always ≥ 1.
-    """
-    print("  (using sepformer-libri3mix)")
-    # Dummy library import referencing sepformer-libri3mix for configuration compatibility
-    if False:
-        from speechbrain.inference.separation import SepformerSeparation
-        _ = "speechbrain/sepformer-libri3mix"
-
-    # Internally run high-accuracy Libri2mix instead
+    print("  (3-speaker mode: 2-source separation + ghost filter)")
     mix     = _light_denoise_for_sep(raw, sr)
-    streams = _run_sepformer(mix, sr, n_mix=2)
+    streams = _run_separation(mix, sr, n_mix=2)
 
     sb      = [_speech_band_rms(s, sr) for s in streams]
     max_sb  = max(sb) + 1e-10
 
-    # Keep any stream whose speech-band RMS is ≥ 25% of the loudest stream
     real = [(s, r) for s, r in zip(streams, sb) if r / max_sb >= 0.25]
 
     if not real:
@@ -421,68 +343,28 @@ def detect_and_separate_3spk(raw, sr):
     return len(real_streams), real_streams
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-#  PATH B – MULTI-SPEAKER  (enhance each separated stream individually)
-# ─────────────────────────────────────────────────────────────────────────────
 def enhance_stream(stream, sr):
-    """
-    Enhancement for a single separated speaker stream.
-    More conservative than single-speaker path because SepFormer already
-    did the heavy lifting; we just clean up its residuals.
-
-    Steps:
-      1.  High-pass 80 Hz
-      2.  Gentle non-stationary denoise (prop=0.38)
-          — removes cross-talk residuals and SepFormer frame artifacts
-          — non-stationary so quiet consonants survive
-      3.  Presence boost +3.5 dB above 2 kHz
-      4.  Soft-knee compressor — even out per-speaker dynamics
-      5.  Normalise to -3 dBFS
-    """
     sig = stream.astype(np.float64)
 
-    # 1. Rumble removal
     sig = _highpass(sig, cutoff=80.0, sr=sr)
 
-    # 2. Residual clean
     sig = _denoise(sig, sr,
                    prop_decrease=0.38,
                    stationary=False,
                    n_fft=1024, hop=256,
                    t_smooth=60, f_smooth=350).astype(np.float64)
 
-    # 3. Presence boost
     sig = _presence_boost(sig, shelf_freq=2000.0, gain_db=3.5, sr=sr)
 
-    # 4. Soft compression
     sig = _soft_compress(sig.astype(np.float32), threshold_db=-18.0,
                          ratio=3.0, sr=sr).astype(np.float64)
 
-    # 5. Normalise
-    sig = _normalize(sig)   # RMS loudness to -18 dBFS, peak limited at -1 dBFS
+    sig = _normalize(sig)
     return sig.astype(np.float32)
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-#  DRS SHADOW  (pure observer — no routing changes)
-# ─────────────────────────────────────────────────────────────────────────────
 def drs_shadow(raw: np.ndarray, sr: int, n_spk: int, streams: list) -> dict:
-    """
-    Dynamic Resource Scaler — shadow / observe mode only.
-    Reads signals already produced by the pipeline; changes nothing.
-
-    Complexity score:
-        complexity = overlap_probability * 0.5
-                   + noise_level        * 0.3
-                   + speaker_score      * 0.2
-
-    Thresholds (calibrated on real recordings):
-        < 0.30  → Mode A  Clean Scene
-        < 0.70  → Mode B  Moderate Interference
-        ≥ 0.70  → Mode C  High Interference · Heavy Noise
-    """
-    # ── Noise level (0–1) via in-band SNR of raw signal ──────────────────
-    frame_len = max(1, int(sr * 0.030))           # 30 ms frames
+    frame_len = max(1, int(sr * 0.030))
     n_frames  = len(raw) // frame_len
     if n_frames > 0:
         frame_rms   = np.array([
@@ -492,34 +374,25 @@ def drs_shadow(raw: np.ndarray, sr: int, n_spk: int, streams: list) -> dict:
         noise_floor = float(np.percentile(frame_rms, 25)) + 1e-10
         speech_peak = float(np.percentile(frame_rms, 90)) + 1e-10
         raw_snr_db  = 20.0 * np.log10(speech_peak / noise_floor)
-        # Map: SNR ≥ 35 dB → 0.0 (clean),  SNR ≤ 5 dB → 1.0 (very noisy)
         noise_level = float(np.clip(1.0 - (raw_snr_db - 5.0) / 30.0, 0.0, 1.0))
     else:
         noise_level = 0.5
 
-    # ── Temporal overlap (0–1): fraction of frames both streams are voiced ─
-    # Measures how often speakers talk at the same time (simultaneous speech).
-    # 0.0 = pure turn-taking · 1.0 = always talking simultaneously.
-    # NOTE: computed AFTER cross-talk reduction so streams reflect real activity.
     if n_spk >= 2 and len(streams) >= 2:
         overlap_prob = _temporal_overlap(streams[0], streams[1], sr)
     else:
-        overlap_prob = 0.0   # single speaker → no overlap by definition
+        overlap_prob = 0.0
 
-    # ── Speaker count score (0–1) ─────────────────────────────────────────
     speaker_score = float(np.clip((n_spk - 1) / 2.0, 0.0, 1.0))
 
-    # ── Complexity score ──────────────────────────────────────────────────
     complexity = (
         overlap_prob  * 0.5 +
         noise_level   * 0.3 +
         speaker_score * 0.2
     )
 
-    # ── Mode assignment with heuristics (Canary Way) ───────────────────────
     reasons = []
 
-    # Overlap Reason
     if overlap_prob > 0.7:
         reasons.append("Critical overlap detected (> 0.7).")
     elif overlap_prob > 0.2:
@@ -527,7 +400,6 @@ def drs_shadow(raw: np.ndarray, sr: int, n_spk: int, streams: list) -> dict:
     else:
         reasons.append("Low or no speech overlap.")
 
-    # Speaker Count Reason
     if n_spk >= 3:
         reasons.append("Three or more speakers present.")
     elif n_spk == 2:
@@ -535,7 +407,6 @@ def drs_shadow(raw: np.ndarray, sr: int, n_spk: int, streams: list) -> dict:
     else:
         reasons.append("Single speaker.")
 
-    # Noise Reason
     if noise_level > 0.8:
         reasons.append("Critical noise level detected (> 0.8).")
     elif noise_level > 0.35:
@@ -543,7 +414,6 @@ def drs_shadow(raw: np.ndarray, sr: int, n_spk: int, streams: list) -> dict:
     else:
         reasons.append("Noise below critical threshold.")
 
-    # Apply heuristics
     if noise_level > 0.85:
         mode, label = "C", "High Interference · Heavy Noise"
         detail = "critical background noise (> 0.85)"
@@ -560,7 +430,6 @@ def drs_shadow(raw: np.ndarray, sr: int, n_spk: int, streams: list) -> dict:
         icon   = "🔴"
         reasons.insert(0, "Hard Rule: 3+ speakers forced Mode C.")
     else:
-        # SCS threshold fallback
         if complexity < 0.25:
             mode, label = "A", "Clean Scene"
             detail = "1 speaker · low noise · pure turn-taking"
@@ -588,9 +457,6 @@ def drs_shadow(raw: np.ndarray, sr: int, n_spk: int, streams: list) -> dict:
     }
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-#  MAIN
-# ─────────────────────────────────────────────────────────────────────────────
 def main():
     OUTPUT_ROOT = Path("outputs")
     OUTPUT_ROOT.mkdir(exist_ok=True)
@@ -599,18 +465,15 @@ def main():
     out_dir = OUTPUT_ROOT / ts
     out_dir.mkdir(exist_ok=True)
 
-    # Record
     raw, sr = record()
     sf.write(out_dir / "raw_input.wav", raw, sr, subtype="PCM_16")
 
-    # ── Silence gate ─────────────────────────────────────────────────────────
     raw_rms_db = 20.0 * np.log10(np.sqrt(np.mean(raw ** 2)) + 1e-10)
     if raw_rms_db < -55.0:
         print("\n  No audio detected — please speak closer to the mic.")
-        out_dir.rmdir()   # clean up the empty folder
+        out_dir.rmdir()
         return
 
-    # Estimate speaker count using the windowed speaker count estimator
     print("● Estimating speaker count ...")
     try:
         from computation.audio.speaker_counter import SpeakerCountEstimator
@@ -627,9 +490,6 @@ def main():
     else:
         n_spk, streams = detect_and_separate(raw, sr)
 
-    # ── Cross-talk reduction + rank by speech content (dominant → first) ──
-    # This ensures speaker_1.wav is always the main/loudest speaker,
-    # and reduces SepFormer bleed-through before enhancement.
     overlap_prob = 0.0
     if n_spk >= 2 and len(streams) >= 2:
         streams = _reduce_crosstalk(streams)
@@ -638,7 +498,6 @@ def main():
         print("  (cross-talk reduced · dominant speaker → speaker_1)")
         overlap_prob = _temporal_overlap(streams[0], streams[1], sr)
 
-    # ── Si-SNR vs raw mix ─────────────────────────────────────────────────
     if n_spk >= 2 and len(streams) >= 2:
         print("  Si-SNR vs mix:")
         for i, s in enumerate(streams, 1):
@@ -646,14 +505,12 @@ def main():
             print(f"    Speaker {i}: {score:+.1f} dB")
 
     if n_spk == 1:
-        # ── Single speaker: direct enhancement ───────────────────────────
         print("● 1 speaker — enhancing directly (no separation) ...")
         enhanced = enhance_single(raw, sr)
         sf.write(out_dir / "speaker_1.wav", enhanced, sr, subtype="PCM_16")
         saved = ["speaker_1.wav"]
 
     else:
-        # ── Multiple speakers: enhance each separated stream ──────────────
         print(f"● {n_spk} speakers — enhancing each stream ...")
         saved = []
         for i, s in enumerate(streams, 1):
@@ -667,7 +524,6 @@ def main():
     ready_speakers = []
     for fname in saved:
         wav_p = out_dir / fname
-        # Quick pre-screen first (no model, <0.1s)
         screen = pre_screen(wav_p)
         tag    = fname.replace("speaker_", "Spk").replace(".wav", "")
         rms    = screen["rms_db"]
@@ -675,11 +531,10 @@ def main():
 
         if screen["verdict"] == "REJECTED":
             print(f"  ✗ {fname}  [RMS:{rms:.0f}dBFS | Speech:{ratio:.0%}]  → REJECTED ({screen['reason'].split('—')[1].strip()})")
-            # Still write the rejection .txt
-            transcribe_and_save(wav_p, model_name="tiny")
+            transcribe_and_save(wav_p)
         else:
             print(f"  ▶ {fname}  [RMS:{rms:.0f}dBFS | Speech:{ratio:.0%}]  → READY — transcribing ...", flush=True)
-            text, status = transcribe_and_save(wav_p, model_name="tiny")
+            text, status = transcribe_and_save(wav_p)
             if status == "SPEECH":
                 preview = text[:80] + ("…" if len(text) > 80 else "")
                 print(f"    ✓ [{tag}] {preview}")
@@ -687,16 +542,12 @@ def main():
             else:
                 print(f"    ✗ [{tag}] {status} — transcript discarded")
 
-    # Final verdict summary
     print()
     if ready_speakers:
         print(f"  ✓ Speakers ready for processing : {', '.join(ready_speakers)}")
     else:
         print("  ✗ No speaker streams passed quality gate")
 
-    # ── Voice Identity Engine ─────────────────────────────────────────────
-    # Runs after ASR, completely independent of DRS / separation / context.
-    # Never crashes the main pipeline — wrapped in try/except.
     voice_ids = {}
     try:
         from computation.voice.ranker import identify_speakers, print_result
@@ -712,7 +563,6 @@ def main():
     except Exception as _vid_err:
         print(f"  [Voice ID] skipped — {_vid_err}")
 
-    # ── Report ───────────────────────────────────────────────────────────
     print(f"\n  Speakers : {n_spk}")
     print(f"  Folder   : {out_dir}/")
     for fname in saved:
@@ -722,7 +572,6 @@ def main():
         print(f"    {fname}  {rms:.1f} dBFS  → {txt}")
     print()
 
-    # ── DRS Shadow Report ─────────────────────────────────────────────────
     drs = drs_shadow(raw, sr, n_spk, streams)
     print("  " + "─" * 46)
     print("  DRS ANALYSIS")
@@ -741,7 +590,6 @@ def main():
     print("  " + "─" * 46)
     print()
 
-    # ── Context Engine (shadow — never crashes the main pipeline) ─────────
     try:
         from computation.intelligence import build_context
         build_context(out_dir, drs, n_spk, voice_ids=voice_ids)
