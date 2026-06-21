@@ -157,12 +157,6 @@ STRATEGIES = {
 
 # --- TTS data --------------------------------------------------------------
 _TTS_SENTENCES = [
-    "what is the weather today",
-    "play some music please",
-    "tell me the latest news",
-    "turn off the living room lights",
-    "set a timer for ten minutes",
-    "what is the temperature outside",
     "stop the music",
     "remind me to call mom at six",
 ]
