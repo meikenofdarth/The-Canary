@@ -258,6 +258,50 @@ def mixture_consistency_scaled(streams: list, mix) -> list:
     return fixed
 
 
+def wiener_reextract(streams: list, mix, sr: int = 16000) -> list:
+    """Re-extract sources from the mixture STFT using Wiener-style masks
+    derived from the ConvTasNet estimates. Preserves the original phase
+    and drastically suppresses cross-talk artifacts."""
+    from scipy.signal import stft as _stft, istft as _istft
+    n_fft = 1024
+    hop = 256
+    L = min(len(mix), min(len(s) for s in streams))
+    _, _, mix_Z = _stft(mix[:L].astype(np.float64), fs=sr, nperseg=n_fft, noverlap=n_fft - hop)
+    est_mags = []
+    for s in streams:
+        _, _, Z = _stft(s[:L].astype(np.float64), fs=sr, nperseg=n_fft, noverlap=n_fft - hop)
+        est_mags.append(np.abs(Z))
+    total_mag = sum(est_mags) + 1e-10
+    result = []
+    for mag in est_mags:
+        mask = np.clip(mag / total_mag, 0.0, 1.0)
+        _, extracted = _istft(mix_Z * mask, fs=sr, nperseg=n_fft, noverlap=n_fft - hop)
+        extracted = extracted.astype(np.float32)
+        if len(extracted) > L:
+            extracted = extracted[:L]
+        elif len(extracted) < L:
+            extracted = np.pad(extracted, (0, L - len(extracted)))
+        result.append(extracted)
+    return result
+
+
+def _spectral_denoise_stream(stream, sr: int = 16000):
+    """Aggressive spectral gating to suppress remaining crosstalk artifacts."""
+    import noisereduce as nr
+    denoised = nr.reduce_noise(
+        y=stream.astype(np.float32),
+        sr=sr,
+        stationary=False,
+        prop_decrease=0.6,
+        n_fft=512,
+        win_length=512,
+        hop_length=128,
+        time_mask_smooth_ms=50,
+        freq_mask_smooth_hz=500,
+    )
+    return denoised.astype(np.float32)
+
+
 def _speech_band_rms(audio, sr, lo=300, hi=3400):
     from scipy.signal import butter, sosfilt
     sos = butter(4, [lo, hi], btype="bandpass", fs=sr, output="sos")

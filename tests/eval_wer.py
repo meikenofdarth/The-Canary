@@ -16,7 +16,7 @@ sys.path.insert(0, str(ROOT))
 import numpy as np
 import soundfile as sf
 
-from run_canary import _run_separation, mixture_consistency_scaled
+from run_canary import _run_separation, _reduce_crosstalk
 from computation.audio.transcribe import transcribe
 
 SR = 16000
@@ -48,7 +48,7 @@ def _transcribe_array(audio: np.ndarray) -> str:
         path = f.name
     try:
         sf.write(path, audio.astype(np.float32), SR, subtype="PCM_16")
-        return transcribe(path, model_name="tiny").get("text", "")
+        return transcribe(path, model_name="base").get("text", "")
     finally:
         try:
             Path(path).unlink()
@@ -92,7 +92,8 @@ def run_librimix(n: int) -> None:
         mix = _load(mf)
         refs = [_transcribe_array(_load(s1)), _transcribe_array(_load(s2))]
 
-        streams = mixture_consistency_scaled(_run_separation(mix, SR, n_mix=2), mix)
+        streams = _run_separation(mix, SR, n_mix=2)
+        streams = _reduce_crosstalk(streams)
         hyps = [_transcribe_array(s) for s in streams]
         sep_wers.append(_best_pair_wer(hyps, refs))
 
@@ -151,8 +152,11 @@ def run_tts() -> None:
         a1, a2 = a1[:L], a2[:L]
         mix = a1 + a2
         mix = (mix / (np.max(np.abs(mix)) + 1e-9) * 0.9).astype(np.float32)
-        streams = mixture_consistency_scaled(_run_separation(mix, SR, n_mix=2), mix)
+        streams = _run_separation(mix, SR, n_mix=2)
+        streams = _reduce_crosstalk(streams)
         hyps = [_transcribe_array(s) for s in streams]
+        print(f"\nREF: {t1} | {t2}")
+        print(f"HYP: {hyps[0]} | {hyps[1]}")
         wers.append(_best_pair_wer(hyps, [t1, t2]))
 
     print("\n" + "=" * 60)

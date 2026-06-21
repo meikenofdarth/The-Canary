@@ -15,7 +15,7 @@ logging.getLogger("whisper").setLevel(logging.ERROR)
 
 _model_cache: dict = {}
 
-_DEFAULT_MODEL = os.environ.get("CANARY_ASR_MODEL", "tiny")
+_DEFAULT_MODEL = os.environ.get("CANARY_ASR_MODEL", "base")
 
 _INITIAL_PROMPT = (
     "Smart home voice assistant transcript. Wake words: canary, jarvis. "
@@ -160,12 +160,11 @@ def transcribe(
             task="transcribe",
             beam_size=5,
             best_of=5,
-            temperature=(0.0, 0.2, 0.4, 0.6, 0.8, 1.0),
+            temperature=0.0,
             compression_ratio_threshold=2.4,
             logprob_threshold=-1.0,
             no_speech_threshold=0.5,
             condition_on_previous_text=False,
-            initial_prompt=_INITIAL_PROMPT,
             verbose=False,
             fp16=False,
         )
