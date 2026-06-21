@@ -29,10 +29,10 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 # Bake model weights into the image (offline + warm first request).
-RUN python scripts/prefetch_models.py
+RUN python src/scripts/prefetch_models.py
 
 EXPOSE 8000
 
 # Security note: this API has no authentication. Do not expose it directly to
 # the public internet — put it behind an authenticating reverse proxy / gateway.
-CMD ["uvicorn", "backend.api:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "backend.api:app", "--app-dir", "src", "--host", "0.0.0.0", "--port", "8000"]

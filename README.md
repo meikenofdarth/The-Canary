@@ -6,10 +6,31 @@ The entire documentation suite (including README.md, plan.md, and implementation
 
 ---
 
+## Hackathon Submission Compliance
+
+This repository is structured to meet all required hackathon guidelines.
+
+- **Technical Documentation:** Detailed explanations of the Tech Stack, OSS libraries, architecture, and implementation details can be found in the [`docs/`](file:///Users/sanchitkumardogra/kaam/Samsung%20Ennovatex%20/docs) folder. Key files include:
+  - [Technical Stack & OSS Libraries](file:///Users/sanchitkumardogra/kaam/Samsung%20Ennovatex%20/docs/tech_stack.md)
+  - [Architecture Document](file:///Users/sanchitkumardogra/kaam/Samsung%20Ennovatex%20/docs/architecture.md)
+  - [Implementation Details](file:///Users/sanchitkumardogra/kaam/Samsung%20Ennovatex%20/docs/implementation.md)
+  - [Installation Guide](file:///Users/sanchitkumardogra/kaam/Samsung%20Ennovatex%20/docs/installation.md)
+  - [Agentic AI & Open-Weight Setup (`ax.md`)](file:///Users/sanchitkumardogra/kaam/Samsung%20Ennovatex%20/docs/ax.md)
+- **Source Code:** All execution code has been cleanly segregated into the `src/` folder. The primary entry point is `src/run_canary.py`.
+- **Models Used:**
+  - [Asteroid ConvTasNet (JorisCos/ConvTasNet_Libri2Mix_sepnoisy_16k)](https://huggingface.co/JorisCos/ConvTasNet_Libri2Mix_sepnoisy_16k)
+  - [OpenAI Whisper Base](https://huggingface.co/openai/whisper-base)
+  - [SpeechBrain ECAPA-TDNN (spkrec-ecapa-voxceleb)](https://huggingface.co/speechbrain/spkrec-ecapa-voxceleb)
+  - [Silero VAD](https://github.com/snakers4/silero-vad)
+- **Models Published:** All models used are open-weight models from the community. We performed run-time optimizations and integration but did not publish a new base model.
+- **Datasets Used:** 
+  - [LibriMix / MiniLibriMix](https://github.com/JorisCos/LibriMix) (Used for separation benchmarking and WER metrics)
+  - [VoxCeleb](https://www.robots.ox.ac.uk/~vgg/data/voxceleb/) (Implicit via ECAPA-TDNN evaluation)
+- **Datasets Published:** No new datasets were synthesized or published; we utilized existing open datasets.
+
+---
+
 ## What We Did (Key Optimizations)
-
-To adapt the assistant pipeline to noisy household environments, the following optimizations were implemented:
-
 1. Stop-on-Silence Recording
 - Problem: The original implementation recorded for a fixed duration, capturing unnecessary silence or room noise.
 - Solution: Integrated a dynamic recording mechanism using Silero Voice Activity Detection (VAD). It streams microphone audio and automatically stops recording after 1.8 seconds of silence once speech is detected, or at a maximum duration of 15 seconds.
