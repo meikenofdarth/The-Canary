@@ -2,9 +2,7 @@
 
 This project is a multi-speaker audio intelligence pipeline designed for smart assistants operating in noisy, dynamic environments. It captures audio, suppresses background noise, estimates the speaker count, separates individual voices, transcribes them using speech-to-text, evaluates scene complexity, and routes commands based on speaker intents and potential conflicts.
 
-The entire documentation suite (including README.md, plan.md, and implementation.md) has been designed with clean structure and no emojis for readability by both human developers and Large Language Models (LLMs).
 
----
 
 ## Hackathon Submission Compliance
 

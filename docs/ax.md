@@ -1,70 +1,64 @@
-# Agentic AI & Open-Weight Models — `ax.md`
+# Agentic AI & Open-Weight Models
 
-This document details how The Canary leverages **open-weight models** and advanced **agentic development tools** to deliver a robust, real-time smart home assistant. It covers our Agentic AI setup, workflows, reasoning pipelines, tool use, memory handling, and the multi-agent orchestration systems we employed.
+Here's a breakdown of how we approached the open-weight constraints and built our agentic workflows for The Canary.
 
----
+## Part A: Open-Weight Models
 
-## Part A — Open-Weight Models Used
+We made sure every machine learning model in this project is strictly open-weight and runs locally on-device. There are no closed APIs or cloud dependencies in the core pipeline.
 
-Every Machine Learning model in our solution is strictly open-weight and runs fully on-device (no closed or cloud-based inference APIs are used in the core pipeline).
-
-| Stage | Open-weight model | License | Source / Hugging Face Link |
+| Stage | Model Used | License | Source |
 |---|---|---|---|
 | **Separation** | ConvTasNet (`JorisCos/ConvTasNet_Libri2Mix_sepnoisy_16k`) | Apache-2.0 | [Asteroid Hub](https://huggingface.co/JorisCos/ConvTasNet_Libri2Mix_sepnoisy_16k) |
-| **ASR** | Whisper Base | MIT | [OpenAI Whisper](https://huggingface.co/openai/whisper-base) |
+| **ASR** | Whisper Base | MIT | [OpenAI](https://huggingface.co/openai/whisper-base) |
 | **Speaker ID** | ECAPA-TDNN (`speechbrain/spkrec-ecapa-voxceleb`) | Apache-2.0 | [SpeechBrain](https://huggingface.co/speechbrain/spkrec-ecapa-voxceleb) |
 | **VAD Gate** | Silero VAD | MIT | [snakers4/silero-vad](https://github.com/snakers4/silero-vad) |
 
-**Budget interpretation:** The official problem statement caps the *multi-speaker separation system* at < 5M parameters. We deliberately spend this budget on the separator (ConvTasNet, 5.06M) and the VAD gate (0.46M), and treat ASR and biometrics as separate downstream stages. This decoupled pipeline is standard practice and allows us to use high-quality open-vocabulary ASR without violating the separation constraint.
+**Meeting the Budget:** The hackathon guidelines cap the multi-speaker separation system at under 5 million parameters. We spent this budget entirely on the separator itself (ConvTasNet is ~5.06M) and the VAD gate (0.46M). We treat the ASR and biometrics as independent downstream components, which is pretty standard for edge pipelines. This lets us use a solid ASR like Whisper without breaking the separation budget.
 
----
+## Part B: Product Architecture & Reasoning
 
-## Part B — The Product: Agentic Setup & Reasoning Pipelines
+Since we're building for edge CPUs where real-time execution (xRT < 0.5) is critical, we couldn't just throw a massive, slow LLM in the hot path. Instead, we built a fast, deterministic reasoning pipeline.
 
-The Canary acts as a deterministic, ultra-fast local agent. Because we are constrained by real-time latency (xRT < 0.5) and a CPU-only edge footprint, we avoided placing a monolithic, non-deterministic LLM in the hot path. Instead, our **Agentic AI setup** relies on a heavily optimized, multi-stage reasoning and planning pipeline.
+### Reasoning & Planning
+The system's reasoning happens in a few fast steps:
+1. **Perception:** The separation, ASR, biometrics, and wakeword modules digest the audio and spit out a structured record: `{transcript, speaker, confidence, wakeword}`.
+2. **Classification & Conflict Detection:** An `utterance_analyzer` categorizes the intent. We also built a `conflict_detector` that checks if speakers are giving contradictory commands (like Speaker A saying "Turn on" and Speaker B saying "Turn off").
+3. **Arbitration (Planning):** The arbitration engine uses a basic Role-Based Access Control (RBAC) system. It calculates a priority score based on biometric confidence, wakeword usage, and whether the user is enrolled. Finally, it decides the execution route: `EXECUTE`, `MULTI_EXECUTE`, `CLARIFY`, or `IGNORE`.
 
-### Reasoning & Planning Pipelines
-Our agent's reasoning operates in sequential phases:
-1. **Perception:** The separation, ASR, biometrics, and wakeword engines process the acoustic environment to yield a structured perception record: `{transcript, speaker, confidence, wakeword}`.
-2. **Classification & Conflict Detection:** The `utterance_analyzer` categorizes the parsed intent across 15 domains. The agent employs a `conflict_detector` that semantically detects adversarial commands (e.g., Speaker A saying "Turn on" while Speaker B says "Turn off").
-3. **Arbitration (Planning):** The arbitration engine uses Role-Based Access Control (RBAC). It computes a priority score based on biometric confidence, wakeword presence, and user enrollment status (`priority = 0.4*wakeword + 0.4*id_conf + 0.2*known`). The agent then *plans* its execution route: `EXECUTE`, `MULTI_EXECUTE`, `CLARIFY`, or `IGNORE`.
+### Tool Use & Chaining
+We map intents to actions using strict tool chaining, similar to how an MCP server works. The intent engine parses entities and hands them off to backend tools:
+- `get_weather(location)` -> hits the wttr.in API.
+- `get_news(location)` -> parses Google News RSS.
+- `play_media(query)` -> searches iTunes.
 
-### Tool Use & Tool Chaining
-Our system connects intentions to actions via strict tool chaining, analogous to an **MCP server** mapping. The intent engine extracts entities and chains them to backend tools:
-- `get_weather(location)` → Fetches from wttr.in JSON API.
-- `get_news(location)` → Fetches from Google News RSS via feedparser.
-- `play_media(query)` → Searches the iTunes API.
+This chain is fully context-aware. It resolves things like "my city" by looking up the identified speaker's profile in the database.
 
-The agentic workflow resolves entities like personal pronouns ("my city") by querying the identified speaker's profile. Thus, the tool chain is context-aware: *Speaker ID + Intent + Entities → Tool Selection → API Call → Personalized Spoken Response*.
+### Memory & Context
+- **Long-term Context:** We keep persistent profiles (`database/Voices/`, `database/canary.db`) that store voice embeddings and personal preferences (home city, favorite music, etc.).
+- **Short-term Memory:** The context for each turn is dumped into `context.json` and `response.json`. This acts as a scratchpad so the system can keep track of state when handling multiple speakers at once.
 
-### Memory & Context Handling
-- **Long-term Context (Profiles):** We maintain persistent user profiles (`database/Voices/`, `database/canary.db`) holding voice embeddings and preferences (home city, news region, favorite music genres).
-- **Short-term Memory (Turn Context):** Per-turn interaction context is serialized to `context.json` and `response.json`, giving the agent a "scratchpad" for traceability and state management across multi-speaker overlaps.
+## Part C: Development & Multi-Agent Orchestration
 
----
+While the final product is highly deterministic, the actual *development* of this codebase relied heavily on multi-agent orchestration.
 
-## Part C — The Development: Multi-Agent Orchestration & Assistants
+### Coding Assistants & Workflows
+We used an AI coding assistant framework during the hackathon. We set up an orchestrating agent that passed specialized tasks to subagents:
+- `docs_writer`: Handled keeping the technical documentation updated and consistent.
+- `frontend-builder`: Took care of building the React web dashboard.
+- `mobile-builder`: Worked on the React Native mobile app in parallel.
 
-While the deployed product is deterministic for speed and safety, **the creation and optimization of the codebase relied heavily on an advanced Multi-agent orchestration system**. 
+### Customizing the Workspace
+We tuned the agentic harness specifically for this project. 
+- We gave the frontend subagent skills (like `modern-web-guidance`) to automatically pull in modern CSS patterns.
+- We set strict workspace rules that forced the agents to constantly check the < 5M parameter cap and the xRT performance targets.
 
-### Coding Assistants, Agents, and Harness
-We utilized a multi-agent AI coding assistant framework (Antigravity). During the hackathon, we set up **Agentic workflows** where a primary orchestrating agent delegated specialized tasks to subagents:
-- `docs_writer`: Entrusted with maintaining architectural documentation and ensuring consistency.
-- `frontend-builder`: Delegated tasks for the web dashboard visualization.
-- `mobile-builder`: Handled the React Native mobile app development.
+### What Worked Well
+1. **Multi-Agent Velocity:** Having separate agents tackle the web dashboard and mobile app while the main agent focused on the heavy Python DSP pipeline was huge. We got a full ecosystem running much faster than we normally would have.
+2. **Measure-Driven Tooling:** We had the agent write its own evaluation tools (`kpi_report.py`, `eval_separation.py`). By hooking these tools directly into the workflow, the agent could automatically test models against the CPU constraints and reject ones that were too heavy.
+3. **Artifact Planning:** Forcing the AI to write out an `implementation_plan.md` before doing major refactors kept everything on track and prevented messy rewrites.
 
-### Workspace Customization: `agents.md` and Skills
-The agentic harness was customized specifically for our workspace. 
-- Using standard **skills** (like `modern-web-guidance`), the frontend subagent automatically applied modern CSS paradigms.
-- The repository's context and rules were governed by workspace constraints that kept the agents focused on the < 5M parameter target and the xRT KPI.
+### What Didn't Work
+1. **LLM Agents for Core Routing:** Originally, we tried using a local SLM for the intent router to handle raw MCP protocol stuff. It was just too slow. For edge hardware, building a deterministic tool-chaining pipeline turned out to be way more practical.
+2. **Trusting Paper Parameter Counts:** We quickly learned we couldn't trust the parameter sizes listed in research papers. For example, CAM++ was listed at ~1.1M but actually measured closer to 7.2M when we loaded it. Building an automated parameter audit script saved us from a disqualification.
 
-### What Worked (From Experience)
-1. **Multi-Agent Orchestration for Full-Stack Velocity:** Delegating the React web dashboard and the React Native mobile app to parallel subagents while the main agent optimized the Python DSP pipeline allowed us to build a comprehensive ecosystem in record time.
-2. **Measure-Driven Tool Chaining:** Our agent wrote and used its own **harness tools** (`tests/kpi_report.py`, `tests/eval_separation.py`). By writing an evaluation tool and chaining it into the workflow, the agent could automatically test models, verify the 5M parameter constraint, and reject models that failed the CPU xRT test (e.g., TIGER and DPRNNTasNet).
-3. **Artifact-Driven Planning:** Creating an `implementation_plan.md` artifact prior to major refactors (like moving to whole-clip inference) ensured the human developer and the AI agent stayed perfectly aligned.
-
-### What Did Not Work (From Experience)
-1. **Relying on Non-Deterministic LLM Agents for Core Routing:** We initially considered using a local GBNF-constrained SLM for the intent router (a true MCP protocol setup). However, latency constraints made this unworkable. A deterministic tool-chaining pipeline was vastly superior for real-time edge hardware.
-2. **Misleading Architectures:** Trusting published paper parameters blindly led us astray. Our agentic harness had to physically load and measure the models. For instance, CAM++ was documented as ~1.1M parameters but measured at 7.2M. The automated parameter audit script saved the project from violating constraints. 
-
-Ultimately, blending highly specialized **coding assistants** during development with a razor-fast, deterministic tool-chaining agent in production yielded the perfect balance of rapid iteration and real-time reliability.
+Using coding assistants to write the software, but keeping the actual product deterministic and tool-based, ended up being the perfect sweet spot for this project.
