@@ -4,6 +4,15 @@ Real-time multi-speaker voice assistant for noisy, multi-user environments.
 Separates overlapping voices, identifies who spoke, resolves command conflicts,
 and delivers a personalized spoken response — entirely on-device, no cloud.
 
+- **Problem Statement Number** - 11
+- **Problem Statement Title** - *Multi-Speaker Audio Intelligence Pipeline for Smart Assistants*
+- **Team name** - *Gada Electronics*
+- **Team members (Names)** - *Sanchit Kumar Dogra*, *Hemang Seth*
+- **Institute/College Name** - 
+- **Final Presentation Google Drive Link** - 
+- **Full Submission Demo Video Link** - 
+- **Setup & Result Reproducibility Video Link** - 
+
 ---
 
 ## System Architecture
@@ -212,6 +221,43 @@ python src/add_voicer.py
 **Docker has no audio output** — The container runs `pygame` in headless mode
 (`SDL_AUDIODRIVER=dummy`). TTS text is returned in the API response.
 Live playback requires the host audio device.
+
+---
+
+## Project Artefacts
+
+- **Technical Documentation** — All technical details (architecture, tech stack, OSS libraries, implementation, installation, user guide) are in the [`docs/`](docs/) folder:
+  - [`docs/architecture.md`](docs/architecture.md) — Full pipeline diagram, tech stack, and OSS library list with links
+  - [`docs/ax.md`](docs/ax.md) — Agentic AI setup, open-weight model selection, what worked and what didn't
+  - [`docs/plan.md`](docs/plan.md) — Stage-by-stage design decisions and implementation log
+- **Source Code** — All project source code is in the [`src/`](src/) folder, including backend, computation modules, frontend, and benchmark evaluation scripts.
+- **Models Used:**
+  - [Asteroid ConvTasNet (JorisCos/ConvTasNet_Libri2Mix_sepnoisy_16k)](https://huggingface.co/JorisCos/ConvTasNet_Libri2Mix_sepnoisy_16k) — Speaker separation
+  - [Asteroid ConvTasNet (JorisCos/ConvTasNet_Libri2Mix_sepclean_16k)](https://huggingface.co/JorisCos/ConvTasNet_Libri2Mix_sepclean_16k) — Speaker separation (clean variant)
+  - [OpenAI Whisper Tiny](https://huggingface.co/openai/whisper-tiny) — Speech-to-text
+  - [SpeechBrain ECAPA-TDNN (spkrec-ecapa-voxceleb)](https://huggingface.co/speechbrain/spkrec-ecapa-voxceleb) — Speaker identification
+  - [Silero VAD](https://github.com/snakers4/silero-vad) — Voice activity detection
+- **Models Published** — No new models were published. We performed runtime optimizations and integration on existing open-weight models.
+- **Datasets Used:**
+  - [LibriMix / MiniLibriMix](https://github.com/JorisCos/LibriMix) — Separation benchmarking and WER evaluation
+  - [VoxCeleb](https://www.robots.ox.ac.uk/~vgg/data/voxceleb/) — Implicit via ECAPA-TDNN pretrained weights
+- **Datasets Published** — No new datasets were published. All evaluation uses existing open datasets.
+
+---
+
+## Attribution
+
+This project was built from scratch and is not a fork of any existing open-source project. The following open-source libraries and pretrained models were used as building blocks:
+
+- [Asteroid](https://github.com/asteroid-team/asteroid) — Audio source separation toolkit (ConvTasNet pretrained weights)
+- [OpenAI Whisper](https://github.com/openai/whisper) — Automatic speech recognition
+- [SpeechBrain](https://github.com/speechbrain/speechbrain) — Speaker verification (ECAPA-TDNN pretrained weights)
+- [Silero VAD](https://github.com/snakers4/silero-vad) — Voice activity detection
+- [FastAPI](https://github.com/tiangolo/fastapi) — Backend API framework
+- [Next.js](https://github.com/vercel/next.js) — Web frontend framework
+- [React Native / Expo](https://github.com/expo/expo) — Mobile app framework
+
+All new features (multi-speaker arbitration, accessibility layers, phonetic wakeword matching, priority-weighted conflict resolution, Acoustic RAG, Lisp Matrix) were developed by the team.
 
 ---
 
