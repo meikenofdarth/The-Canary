@@ -8,8 +8,10 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent.parent))  # project root → finds database/
 
+from backend.queue import process_arbitration
 
-def get_latest_response() -> Path | None:
+
+def get_latest_response():
     outputs_dir = Path("outputs")
     if not outputs_dir.exists():
         return None

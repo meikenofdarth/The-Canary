@@ -17,6 +17,8 @@ if str(_SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(_SRC_ROOT))
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))  # project root → finds database/
+
+VOICES_ROOT = _PROJECT_ROOT / "database" / "Voices"
 SAMPLE_RATE = 16_000
 
 
