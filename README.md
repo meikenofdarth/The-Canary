@@ -107,7 +107,7 @@ and delivers a personalized spoken response — entirely on-device, no cloud.
     The assistant activates it immediately without retraining.
   </li>
 </ul>
----
+
 
 ## Use Cases Demonstration
 
