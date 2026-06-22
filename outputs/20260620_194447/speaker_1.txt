@@ -1,0 +1,8 @@
+[Language: en]
+[Status: ✓  READY — meaningful speech detected]
+[RMS: -20.8 dBFS | Speech ratio: 47%]
+
+hey, tamdi, what is the weather today?
+
+--- Segments ---
+[0.00s → 7.00s] Hey, tamdi, what is the weather today?

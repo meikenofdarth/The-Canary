@@ -11,11 +11,12 @@ from typing import Optional
 import numpy as np
 import soundfile as sf
 
-_PROJECT_ROOT = Path(__file__).parent.parent.parent
-if str(_PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(_PROJECT_ROOT))
+_SRC_ROOT = Path(__file__).parent.parent.parent
+_PROJECT_ROOT = _SRC_ROOT.parent
+if str(_SRC_ROOT) not in sys.path:
+    sys.path.insert(0, str(_SRC_ROOT))
 
-VOICES_ROOT = Path(__file__).parent.parent.parent / "database" / "Voices"
+VOICES_ROOT = _PROJECT_ROOT / "database" / "Voices"
 SAMPLE_RATE = 16_000
 
 

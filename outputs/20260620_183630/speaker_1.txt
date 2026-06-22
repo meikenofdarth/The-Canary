@@ -1,0 +1,8 @@
+[Language: en]
+[Status: ✓  READY — meaningful speech detected]
+[RMS: -18.0 dBFS | Speech ratio: 86%]
+
+turn off the living room lights.
+
+--- Segments ---
+[0.00s → 2.00s] Turn off the living room lights.

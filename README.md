@@ -155,6 +155,31 @@ The-Canary/
 ├── Dockerfile
 ├── docker-compose.yml
 └── requirements.txt
+├── src/
+│   ├── run_canary.py           CLI pipeline entry point
+│   ├── add_voicer.py           Interactive speaker enrollment studio
+│   ├── param_audit.py          Per-stage parameter budget audit
+│   ├── backend/                FastAPI server, tool layer (weather/news/music), TTS
+│   ├── computation/
+│   │   ├── audio/              VAD, denoiser, ConvTasNet separator, Whisper ASR
+│   │   ├── voice/              ECAPA-TDNN enrollment, feature extraction, matching
+│   │   ├── intelligence/       Intent engine, Lisp Matrix, Acoustic RAG, conflict
+│   │   │                       detection, arbitration, context builder
+│   │   └── wakeword/           C++ weighted-Levenshtein phonetic matcher
+│   ├── frontend/
+│   │   ├── web/                Next.js 16 + React 19 + Tailwind CSS dashboard
+│   │   └── mobile/             React Native app
+│   └── tests/                  SI-SNR eval, WER eval, xRT report, unit tests
+├── database/
+│   ├── canary.db               SQLite — users, preferences, priorities
+│   └── Voices/<name>/          Per-speaker recordings and biometric feature files
+├── docs/
+│   ├── architecture.md         Full pipeline diagram and tech stack
+│   ├── ax.md                   Agentic AI setup and open-weight model selection log
+│   └── plan.md                 Stage-by-stage design decisions
+├── Dockerfile
+├── docker-compose.yml
+└── requirements.txt
 ```
 
 ---

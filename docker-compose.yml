@@ -16,7 +16,7 @@ services:
 
   web:
     build:
-      context: ./frontend/web
+      context: ./src/frontend/web
       args:
         # Browser runs on the host, so it reaches the API via the mapped port.
         NEXT_PUBLIC_CANARY_API: http://localhost:8000

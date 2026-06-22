@@ -1,0 +1,8 @@
+[Language: en]
+[Status: ✓  READY — meaningful speech detected]
+[RMS: -21.3 dBFS | Speech ratio: 70%]
+
+hey canary, what is the weather today?
+
+--- Segments ---
+[0.00s → 4.00s] Hey canary, what is the weather today?

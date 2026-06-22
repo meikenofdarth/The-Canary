@@ -18,9 +18,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-_PROJECT_ROOT = Path(__file__).parent.parent
-if str(_PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(_PROJECT_ROOT))
+_SRC_ROOT = Path(__file__).parent.parent
+_PROJECT_ROOT = _SRC_ROOT.parent
+if str(_SRC_ROOT) not in sys.path:
+    sys.path.insert(0, str(_SRC_ROOT))
 
 from computation.audio.transcribe import transcribe_and_save, pre_screen, transcribe
 from computation.audio.speaker_counter import SpeakerCountEstimator
@@ -69,7 +70,7 @@ app.add_middleware(
 )
 
 
-_INTERFACE_DIR = _PROJECT_ROOT / "frontend" / "interface"
+_INTERFACE_DIR = _SRC_ROOT / "frontend" / "interface"
 
 
 @app.get("/")
@@ -570,7 +571,7 @@ async def change_wakeword_endpoint(
         counts = Counter(transcriptions)
         winner = counts.most_common(1)[0][0]
 
-        wakeword_dir = _PROJECT_ROOT / "computation" / "wakeword"
+        wakeword_dir = _SRC_ROOT / "computation" / "wakeword"
         config_path = wakeword_dir / "wakeword_config.json"
         binary_path = wakeword_dir / "build" / "wakeword_matcher"
 
@@ -760,7 +761,7 @@ _run_state  = {"status": "idle", "result": None, "error": None, "proc": None}
 def _launch_run_canary():
     global _run_state
     python  = sys.executable
-    script  = str(_PROJECT_ROOT / "run_canary.py")
+    script  = str(_SRC_ROOT / "run_canary.py")
     resp_p  = _PROJECT_ROOT / "response.json"
 
     with _run_lock:
