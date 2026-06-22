@@ -1,9 +1,12 @@
 # The Canary — backend API image (FastAPI + separation/ASR/biometrics pipeline).
+# Docker Hub: https://hub.docker.com/r/knightstriker/the-canary
 FROM python:3.12-slim
 
 ENV PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
     HF_HUB_DISABLE_TELEMETRY=1 \
+    HF_HUB_DISABLE_IMPLICIT_TOKEN=1 \
+    TRANSFORMERS_OFFLINE=0 \
     SDL_AUDIODRIVER=dummy \
     CANARY_ASR_MODEL=tiny
 
@@ -28,11 +31,10 @@ RUN pip install --no-cache-dir -r requirements.txt
 # App source (see .dockerignore for what's excluded).
 COPY . .
 
-# Bake model weights into the image (offline + warm first request).
+# Bake ALL model weights into the image — Silero VAD, ConvTasNet, ECAPA-TDNN, Whisper tiny.
+# After this step the image runs fully offline; first request is warm.
 RUN python src/scripts/prefetch_models.py
 
 EXPOSE 8000
 
-# Security note: this API has no authentication. Do not expose it directly to
-# the public internet — put it behind an authenticating reverse proxy / gateway.
 CMD ["uvicorn", "backend.api:app", "--app-dir", "src", "--host", "0.0.0.0", "--port", "8000"]

@@ -60,6 +60,12 @@ async def _startup_banner():
         warmup_separation()
     except Exception as e:
         print(f"  [startup] separation warm-up skipped: {e}")
+    try:
+        from computation.audio.vad_segmenter import _get_vad_model
+        _get_vad_model()
+        print("  [startup] Silero VAD warmed")
+    except Exception as e:
+        print(f"  [startup] VAD warm-up skipped: {e}")
 
 app.add_middleware(
     CORSMiddleware,

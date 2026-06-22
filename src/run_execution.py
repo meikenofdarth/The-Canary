@@ -6,8 +6,7 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-
-from backend.queue import process_arbitration
+sys.path.insert(0, str(Path(__file__).parent.parent))  # project root → finds database/
 
 
 def get_latest_response() -> Path | None:

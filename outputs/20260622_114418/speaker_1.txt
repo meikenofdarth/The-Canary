@@ -1,0 +1,8 @@
+[Language: en]
+[Status: ✓  READY — meaningful speech detected]
+[RMS: -26.7 dBFS | Speech ratio: 73%]
+
+let me watch the weather in my city.
+
+--- Segments ---
+[0.00s → 7.00s] Let me watch the weather in my city.

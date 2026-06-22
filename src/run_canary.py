@@ -1,12 +1,17 @@
 #!/usr/bin/env python3
 
-import sys, time, datetime, warnings, threading
+import sys, time, datetime, warnings, threading, os
 import numpy as np
 import sounddevice as sd
 import soundfile as sf
 from pathlib import Path
 
+# Suppress Hugging Face unauthenticated request warning
+os.environ.setdefault("HF_HUB_DISABLE_IMPLICIT_TOKEN", "1")
+warnings.filterwarnings("ignore", message=".*unauthenticated.*")
+
 sys.path.insert(0, str(Path(__file__).parent))
+sys.path.insert(0, str(Path(__file__).parent.parent))  # project root → finds database/
 
 SAMPLE_RATE = 16000
 DURATION    = 7

@@ -1,0 +1,8 @@
+[Language: en]
+[Status: ✓  READY — meaningful speech detected]
+[RMS: -24.8 dBFS | Speech ratio: 19%]
+
+i can't very much go through that in my city.
+
+--- Segments ---
+[0.00s → 3.00s] I can't very much go through that in my city.  [low confidence]

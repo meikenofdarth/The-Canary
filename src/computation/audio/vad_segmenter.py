@@ -38,6 +38,7 @@ def _get_vad_model():
     if _vad_model is None:
         with _vad_lock:
             if _vad_model is None:
+                import torch
                 from silero_vad import load_silero_vad
                 _vad_model = load_silero_vad()
     return _vad_model

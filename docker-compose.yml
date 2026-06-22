@@ -3,14 +3,14 @@
 # API  → http://localhost:8000   Web → http://localhost:3000
 services:
   api:
+    image: knightstriker/the-canary:latest
     build: .
-    image: canary-api
     ports:
       - "8000:8000"
     environment:
       - CANARY_ASR_MODEL=tiny
+      - HF_HUB_DISABLE_IMPLICIT_TOKEN=1
     volumes:
-      # Persist enrolled users + voice profiles across container restarts.
       - ./database:/app/database
     restart: unless-stopped
 

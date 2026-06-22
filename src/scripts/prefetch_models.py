@@ -9,24 +9,35 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 
 def main() -> None:
-    # Separation: both ConvTasNet variants the auto-selector can pick.
+    print("[prefetch] downloading Silero VAD ...")
+    from silero_vad import load_silero_vad
+    load_silero_vad()
+    print("[prefetch] Silero VAD cached")
+
+    print("[prefetch] downloading ConvTasNet (noisy) ...")
     from computation.audio.separator import _get_model
     _get_model("noisy")
-    _get_model("clean")
+    print("[prefetch] ConvTasNet noisy cached")
 
-    # Speaker biometrics: ECAPA-TDNN (savedir is relative to CWD = /app).
+    print("[prefetch] downloading ConvTasNet (clean) ...")
+    _get_model("clean")
+    print("[prefetch] ConvTasNet clean cached")
+
+    print("[prefetch] downloading ECAPA-TDNN ...")
     from speechbrain.inference.speaker import EncoderClassifier
     EncoderClassifier.from_hparams(
         source="speechbrain/spkrec-ecapa-voxceleb",
         savedir="pretrained_models/spkrec-ecapa-voxceleb",
         run_opts={"device": "cpu"},
     )
+    print("[prefetch] ECAPA-TDNN cached")
 
-    # ASR: Whisper tiny.
+    print("[prefetch] downloading Whisper tiny ...")
     import whisper
     whisper.load_model("tiny")
+    print("[prefetch] Whisper tiny cached")
 
-    print("[prefetch] all models cached")
+    print("[prefetch] ALL models cached — subsequent runs will be instant")
 
 
 if __name__ == "__main__":

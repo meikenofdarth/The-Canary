@@ -1,38 +1,36 @@
 {
-  "timestamp": "2026-06-20T19:45:02.260404",
-  "session_dir": "outputs/20260620_194447",
+  "timestamp": "2026-06-22T11:45:11.064539",
+  "session_dir": "outputs/20260622_114418",
   "drs_mode": "B",
   "scene": {
     "speaker_count": 2,
-    "complexity": 0.482,
-    "noise_level": 0.054,
-    "simul_speech": 0.733
+    "complexity": 0.438,
+    "noise_level": 0.199,
+    "simul_speech": 0.556
   },
   "speakers": [
     {
       "id": "speaker_1",
       "status": "READY",
-      "transcript": "hey, tamdi, what is the weather today?",
+      "transcript": "let me watch the weather in my city.",
       "wakeword": false,
       "wakeword_confidence": 0.0,
       "wakeword_phrase": null,
-      "type": "QUESTION",
-      "type_confidence": 0.8,
-      "identity": "Sanchit",
-      "identity_confidence": 0.5808,
-      "known_user": true,
+      "type": "COMMAND",
+      "type_confidence": 0.95,
+      "identity": "UNKNOWN",
+      "identity_confidence": 0.0,
+      "known_user": false,
       "start_time": 0.0,
       "intent_result": {
         "domain": "WEATHER",
         "polarity": "POSITIVE",
         "confidence": 0.55,
-        "entities": {
-          "time_reference": "today"
-        },
+        "entities": {},
         "raw_signals": [
           "weather"
         ],
-        "original_text": "hey, tamdi, what is the weather today?"
+        "original_text": "let me watch the weather in my city."
       }
     },
     {
@@ -44,9 +42,9 @@
       "wakeword_phrase": null,
       "type": "UNKNOWN",
       "type_confidence": 0.0,
-      "identity": "Deepkumar",
-      "identity_confidence": 0.403,
-      "known_user": true,
+      "identity": "UNKNOWN",
+      "identity_confidence": 0.0,
+      "known_user": false,
       "start_time": 0.0,
       "intent_result": {
         "domain": "UNKNOWN",
@@ -70,24 +68,24 @@
     "speakers": [
       {
         "id": "speaker_1",
-        "identity": "Sanchit",
-        "identity_confidence": 0.5808,
-        "known_user": true,
+        "identity": "UNKNOWN",
+        "identity_confidence": 0.0,
+        "known_user": false,
         "wakeword": false,
         "wakeword_confidence": 0.0,
-        "transcript": "hey, tamdi, what is the weather today?",
-        "type": "QUESTION",
+        "transcript": "let me watch the weather in my city.",
+        "type": "COMMAND",
         "separation_quality": 1.0,
         "identity_note": "",
         "start_time": 0.0,
-        "priority": 0.4323,
+        "priority": 0.0,
         "intent": "WEATHER"
       },
       {
         "id": "speaker_2",
-        "identity": "Deepkumar",
-        "identity_confidence": 0.403,
-        "known_user": true,
+        "identity": "UNKNOWN",
+        "identity_confidence": 0.0,
+        "known_user": false,
         "wakeword": false,
         "wakeword_confidence": 0.0,
         "transcript": "",
@@ -95,7 +93,7 @@
         "separation_quality": 1.0,
         "identity_note": "",
         "start_time": 0.0,
-        "priority": 0.3612,
+        "priority": 0.0,
         "intent": null
       }
     ]

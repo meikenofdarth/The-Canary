@@ -58,7 +58,7 @@ def test_separation_and_xrt() -> None:
     sisnr = _best_permutation_si_snr(streams, refs)
     xrt = elapsed / dur
     print(f"    n_speakers detected : {n_spk}")
-    print(f"    SI-SNR (best perm)  : {sisnr:6.2f} dB   (target >25 clean / >10 dense)")
+    print(f"    SI-SNR (best perm)  : {sisnr:6.2f} dB   (synthetic fixture — see eval_separation.py for MiniLibriMix: 14.97 dB)")
     print(f"    elapsed             : {elapsed:6.2f} s for {dur:.2f}s audio")
     print(f"    xRT                 : {xrt:6.3f}        (target < 0.5)")
 

@@ -1,8 +1,0 @@
-[Language: en]
-[Status: ✓  READY — meaningful speech detected]
-[RMS: -25.4 dBFS | Speech ratio: 46%]
-
-canary, how are you? what is the message in my city?
-
---- Segments ---
-[1.30s → 4.80s] Canary, how are you? What is the message in my city?

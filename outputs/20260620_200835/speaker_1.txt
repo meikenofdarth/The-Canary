@@ -1,8 +1,0 @@
-[Language: en]
-[Status: ✓  READY — meaningful speech detected]
-[RMS: -19.8 dBFS | Speech ratio: 65%]
-
-hey canary, what is the weather in new york today?
-
---- Segments ---
-[0.00s → 5.00s] Hey canary, what is the weather in New York today?

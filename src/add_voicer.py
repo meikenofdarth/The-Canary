@@ -14,8 +14,7 @@ import sounddevice as sd
 import soundfile as sf
 
 sys.path.insert(0, str(Path(__file__).parent))
-
-logging.getLogger("huggingface_hub").setLevel(logging.ERROR)
+sys.path.insert(0, str(Path(__file__).parent.parent))  # project root → finds database/.setLevel(logging.ERROR)
 logging.getLogger("huggingface_hub.utils._headers").setLevel(logging.ERROR)
 os.environ["HF_HUB_DISABLE_IMPLICIT_TOKEN"] = "1"
 

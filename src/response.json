@@ -1,13 +1,13 @@
 {
   "schema_version": "1.0",
-  "timestamp": "2026-06-20T20:08:04.975740",
-  "session_dir": "/var/folders/2g/gr_ml0vx0dq1mf1473z5bsdc0000gn/T/canary_api_qprfeaxe",
+  "timestamp": "2026-06-22T11:45:11.064718",
+  "session_dir": "outputs/20260622_114418",
   "scene": {
-    "drs_mode": "A",
-    "speaker_count": 1,
-    "complexity": 0.0,
-    "noise_level": 0.0,
-    "simul_speech": 0.0
+    "drs_mode": "B",
+    "speaker_count": 2,
+    "complexity": 0.438,
+    "noise_level": 0.199,
+    "simul_speech": 0.556
   },
   "active_command": null,
   "route": "IGNORE",
@@ -15,24 +15,39 @@
   "all_speakers": [
     {
       "speaker_id": "speaker_1",
-      "identity": "Sanchit",
-      "known_user": true,
+      "identity": "UNKNOWN",
+      "known_user": false,
       "status": "READY",
-      "transcript": "heat jarvis, what is the weather today?",
+      "transcript": "let me watch the weather in my city.",
       "wakeword": false,
       "wakeword_phrase": null,
       "wakeword_confidence": 0.0,
       "domain": "WEATHER",
       "polarity": "POSITIVE",
       "intent_confidence": 0.55,
-      "entities": {
-        "time_reference": "today"
-      },
+      "entities": {},
       "raw_signals": [
         "weather"
       ],
-      "priority_score": 0.4816,
-      "identity_confidence": 0.704
+      "priority_score": 0.0,
+      "identity_confidence": 0.0
+    },
+    {
+      "speaker_id": "speaker_2",
+      "identity": "UNKNOWN",
+      "known_user": false,
+      "status": "REJECTED",
+      "transcript": "",
+      "wakeword": false,
+      "wakeword_phrase": null,
+      "wakeword_confidence": 0.0,
+      "domain": "UNKNOWN",
+      "polarity": "NEUTRAL",
+      "intent_confidence": 0.0,
+      "entities": {},
+      "raw_signals": [],
+      "priority_score": 0.0,
+      "identity_confidence": 0.0
     }
   ],
   "conflict": {
@@ -48,7 +63,7 @@
   },
   "priority_engine_log": [
     "=== Priority Engine Trace ===",
-    "Total speakers in session: 1",
+    "Total speakers in session: 2",
     "Speakers with wakeword+command: 0",
     "Rule 0 FIRED — No wakeword commands. Route: IGNORE."
   ]

@@ -1,13 +1,13 @@
 {
   "schema_version": "1.0",
-  "timestamp": "2026-06-20T19:45:42.160712",
-  "session_dir": "outputs/20260620_194513",
+  "timestamp": "2026-06-22T11:45:11.064718",
+  "session_dir": "outputs/20260622_114418",
   "scene": {
     "drs_mode": "B",
     "speaker_count": 2,
-    "complexity": 0.508,
-    "noise_level": 0.0,
-    "simul_speech": 0.816
+    "complexity": 0.438,
+    "noise_level": 0.199,
+    "simul_speech": 0.556
   },
   "active_command": null,
   "route": "IGNORE",
@@ -15,31 +15,10 @@
   "all_speakers": [
     {
       "speaker_id": "speaker_1",
-      "identity": "Sanchit",
-      "known_user": true,
-      "status": "READY",
-      "transcript": "jarvis, what is the weather today?",
-      "wakeword": false,
-      "wakeword_phrase": null,
-      "wakeword_confidence": 0.0,
-      "domain": "WEATHER",
-      "polarity": "POSITIVE",
-      "intent_confidence": 0.55,
-      "entities": {
-        "time_reference": "today"
-      },
-      "raw_signals": [
-        "weather"
-      ],
-      "priority_score": 0.4181,
-      "identity_confidence": 0.5452
-    },
-    {
-      "speaker_id": "speaker_2",
       "identity": "UNKNOWN",
       "known_user": false,
       "status": "READY",
-      "transcript": "hey, jarvis, what is the weather in my city?",
+      "transcript": "let me watch the weather in my city.",
       "wakeword": false,
       "wakeword_phrase": null,
       "wakeword_confidence": 0.0,
@@ -50,6 +29,23 @@
       "raw_signals": [
         "weather"
       ],
+      "priority_score": 0.0,
+      "identity_confidence": 0.0
+    },
+    {
+      "speaker_id": "speaker_2",
+      "identity": "UNKNOWN",
+      "known_user": false,
+      "status": "REJECTED",
+      "transcript": "",
+      "wakeword": false,
+      "wakeword_phrase": null,
+      "wakeword_confidence": 0.0,
+      "domain": "UNKNOWN",
+      "polarity": "NEUTRAL",
+      "intent_confidence": 0.0,
+      "entities": {},
+      "raw_signals": [],
       "priority_score": 0.0,
       "identity_confidence": 0.0
     }

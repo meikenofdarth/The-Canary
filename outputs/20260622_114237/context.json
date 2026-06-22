@@ -1,38 +1,34 @@
 {
-  "timestamp": "2026-06-20T19:44:31.670498",
-  "session_dir": "/var/folders/2g/gr_ml0vx0dq1mf1473z5bsdc0000gn/T/canary_api_68s3uyec",
-  "drs_mode": "A",
+  "timestamp": "2026-06-22T11:42:43.551688",
+  "session_dir": "/var/folders/73/40l2jyy55_jcj3y1z805dzjm0000gn/T/canary_api_au9s4m5g",
+  "drs_mode": "C",
   "scene": {
     "speaker_count": 1,
-    "complexity": 0.0,
-    "noise_level": 0.0,
+    "complexity": 0.275,
+    "noise_level": 0.915,
     "simul_speech": 0.0
   },
   "speakers": [
     {
       "id": "speaker_1",
       "status": "READY",
-      "transcript": "which is the weather today?",
+      "transcript": "i can't very much go through that in my city.",
       "wakeword": false,
       "wakeword_confidence": 0.0,
       "wakeword_phrase": null,
-      "type": "QUESTION",
-      "type_confidence": 0.9,
+      "type": "CONVERSATION",
+      "type_confidence": 0.75,
       "identity": "UNKNOWN",
-      "identity_confidence": 0.3283,
+      "identity_confidence": 0.4015,
       "known_user": false,
       "start_time": 0.0,
       "intent_result": {
-        "domain": "WEATHER",
-        "polarity": "POSITIVE",
-        "confidence": 0.55,
-        "entities": {
-          "time_reference": "today"
-        },
-        "raw_signals": [
-          "weather"
-        ],
-        "original_text": "which is the weather today?"
+        "domain": "UNKNOWN",
+        "polarity": "NEUTRAL",
+        "confidence": 0.0,
+        "entities": {},
+        "raw_signals": [],
+        "original_text": "i can't very much go through that in my city."
       }
     }
   ],
@@ -53,13 +49,13 @@
         "known_user": false,
         "wakeword": false,
         "wakeword_confidence": 0.0,
-        "transcript": "which is the weather today?",
-        "type": "QUESTION",
+        "transcript": "i can't very much go through that in my city.",
+        "type": "CONVERSATION",
         "separation_quality": 1.0,
         "identity_note": "",
         "start_time": 0.0,
         "priority": 0.0,
-        "intent": "WEATHER"
+        "intent": "GENERAL_COMMAND"
       }
     ]
   }
