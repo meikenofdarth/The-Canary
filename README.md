@@ -28,7 +28,7 @@ and delivers a personalized spoken response — entirely on-device, no cloud.
     * [Watch on YouTube](https://youtu.be/dQkT4lMXtuU)
     * [Watch on Google Drive](https://drive.google.com/file/d/1PjfOLPFI2sn0qQb11eXi8ZB_W9kbdSBN/view?usp=sharing)
 
-* **Setup & Result Reproducibility Video** — *(add YouTube link here — public or unlisted)*
+* **Setup & Result Reproducibility Video** — [Link](https://youtu.be/oktQIKnIjgs)
 
 ---
 
@@ -444,13 +444,23 @@ python3 src/add_voicer.py
 # Interactive studio: 3 scripted recordings, live quality check, preference setup
 ```
 
-### Step 6 — Run CLI pipeline (microphone, no server needed)
+### Step 6 — Run the complete CLI pipeline (microphone, no server needed)
+
+Open **Terminal 1** and start the Canary pipeline:
 
 ```bash
 source .venv/bin/activate
 python3 src/run_canary.py
 ```
 
+Open **Terminal 2** and start the execution engine:
+
+```bash
+source .venv/bin/activate
+python3 src/run_execution.py
+```
+
+Both terminals should remain running. The system will now capture microphone audio, perform speaker separation and transcription, resolve commands, and execute actions in real time.
 ---
 
 ## Docker
