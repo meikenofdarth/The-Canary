@@ -381,7 +381,7 @@ sudo apt-get install portaudio19-dev ffmpeg libsndfile1
 ### Step 2 — Clone and install
 
 ```bash
-git clone https://github.com/your-org/The-Canary.git
+https://github.com/meikenofdarth/The-Canary.git
 cd The-Canary
 
 python3 -m venv .venv
